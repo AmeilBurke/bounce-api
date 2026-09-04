@@ -1,0 +1,44 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  BOUNCER
+  // VENUE_MANAGER
+  // DUTY_MANAGER
+}
+
+model Staff {
+  id       String  @id @default(uuid())
+  email    String  @unique
+  password String
+  name     String
+  role     Role
+  alerts   Alert[] @relation("AlertCreator")
+  // venueManagerAssignments VenueManager[]
+  // dutyManagerAssignments  DutyManager[]
+  // bansCreated             Ban[]          @relation("BanCreator")
+}
+
+model Alert {
+  id          String   @id @default(uuid())
+  personId    String?  @unique
+  reason      String
+  imagePath   String
+  startDate   DateTime @default(now())
+  createdById String
+  createdBy   Staff    @relation("AlertCreator", fields: [createdById], references: [id])
+  // bannedPerson BannedPerson? @relation(fields: [personId], references: [id])
+}
