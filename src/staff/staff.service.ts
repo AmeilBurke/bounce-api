@@ -1,19 +1,36 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { PrismaService } from '../prisma.service';
 import { StaffEntity } from './staff.entity';
 import * as argon2 from 'argon2';
-import { Prisma, Staff } from '../generated/prisma/client';
+import { Prisma, Role, Staff } from '../generated/prisma/client';
+import type { StaffPayload } from '../auth/staff-payload.interface';
 
 @Injectable()
 export class StaffService {
   constructor(private prisma: PrismaService) { }
 
-  async create(createStaffDto: CreateStaffDto): Promise<StaffEntity> {
+  async create(createStaffDto: CreateStaffDto, staff?: StaffPayload): Promise<StaffEntity> {
+    const staffCount = await this.prisma.staff.count();
+    const isFirstAccount = staffCount === 0;
+
+    if (!isFirstAccount) {
+      if (!staff) {
+        throw new UnauthorizedException();
+      }
+
+      const isAdmin = await this.isAccountAdmin(staff.id);
+      if (!isAdmin) {
+        throw new ForbiddenException();
+      }
+    }
+
     const hashedPassword = await argon2.hash(createStaffDto.password);
 
     try {
@@ -22,21 +39,16 @@ export class StaffService {
           email: createStaffDto.email.toLowerCase().trim(),
           password: hashedPassword,
           name: createStaffDto.name.toLowerCase(),
-          role: createStaffDto.role,
+          role: isFirstAccount ? Role.ADMIN : createStaffDto.role,
         },
       });
 
       return new StaffEntity(newStaff);
     } catch (err) {
-      {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
-        ) {
-          throw new ConflictException('Email already in use');
-        }
-        throw err;
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Email already in use');
       }
+      throw err;
     }
   }
 
@@ -58,6 +70,16 @@ export class StaffService {
     }
 
     return foundStaff;
+  }
+
+  async isAccountAdmin(staffId: Staff["id"]) {
+    const requestFrom = await this.prisma.staff.findUnique({
+      where: {
+        id: staffId
+      }
+    });
+
+    return requestFrom?.role === Role.ADMIN;
   }
 
   // update(id: number, updateStaffDto: UpdateStaffDto) {

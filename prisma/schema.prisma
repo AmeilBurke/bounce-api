@@ -34,11 +34,11 @@ model Staff {
 
 model Alert {
   id          String   @id @default(uuid())
-  personId    String?  @unique
   reason      String
   imagePath   String
   startDate   DateTime @default(now())
   createdById String
+  personId    String?  @unique
   createdBy   Staff    @relation("AlertCreator", fields: [createdById], references: [id])
   // bannedPerson BannedPerson? @relation(fields: [personId], references: [id])
 }

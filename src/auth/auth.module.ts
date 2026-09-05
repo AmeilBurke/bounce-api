@@ -6,6 +6,7 @@ import { StaffModule } from '../staff/staff.module';
 import { AuthenticationController } from './auth.controller';
 import { AuthenticationGuard } from './auth.guard';
 import { AuthenticationService } from './auth.service';
+import { PrismaService } from '../prisma.service';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { AuthenticationService } from './auth.service';
   providers: [AuthenticationService, {
     provide: APP_GUARD,
     useClass: AuthenticationGuard,
-  },],
+  }],
   controllers: [AuthenticationController],
   exports: [AuthenticationService]
 })
