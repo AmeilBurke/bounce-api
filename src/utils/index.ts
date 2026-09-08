@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { Request } from 'express';
+import { PrismaClient, Roles, Staff } from "../generated/prisma/client";
 
 export function toTitleCase(input: string): string {
   return input
@@ -39,4 +40,15 @@ export const imageFileValidator = (file: { fieldname?: string; originalname?: st
       false,
     );
   }
+}
+
+export async function isAccountAdmin(
+  prisma: PrismaClient,
+  staffId: Staff["id"]
+): Promise<boolean> {
+  const requestFrom = await prisma.staff.findUnique({
+    where: { id: staffId },
+  });
+
+  return requestFrom?.role === Roles.ADMIN;
 }

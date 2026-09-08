@@ -11,7 +11,7 @@ import { StaffEntity } from './staff.entity';
 import * as argon2 from 'argon2';
 import { Prisma, Roles, Staff } from '../generated/prisma/client';
 import type { StaffPayload } from '../auth/staff-payload.interface';
-import { toTitleCase } from '../utils';
+import { isAccountAdmin, toTitleCase } from '../utils';
 
 @Injectable()
 export class StaffService {
@@ -26,7 +26,7 @@ export class StaffService {
         throw new UnauthorizedException();
       }
 
-      const isAdmin = await this.isAccountAdmin(staff.id);
+      const isAdmin = await isAccountAdmin(this.prisma, staff.id);
       if (!isAdmin) {
         throw new ForbiddenException();
       }
@@ -71,16 +71,6 @@ export class StaffService {
     }
 
     return foundStaff;
-  }
-
-  async isAccountAdmin(staffId: Staff["id"]) {
-    const requestFrom = await this.prisma.staff.findUnique({
-      where: {
-        id: staffId
-      }
-    });
-
-    return requestFrom?.role === Roles.ADMIN;
   }
 
   // update(id: number, updateStaffDto: UpdateStaffDto) {

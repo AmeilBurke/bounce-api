@@ -9,6 +9,7 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { getBaseUrl, imageFileValidator } from '../utils';
 import express from "express";
+import { Alerts } from '../generated/prisma/client';
 
 @Controller('alerts')
 export class AlertsController {
@@ -37,22 +38,13 @@ export class AlertsController {
   }
 
   @Get()
-  findAll() {
-    return this.alertsService.findAll();
+  findAll(@Req() req: express.Request) {
+    const baseUrl = getBaseUrl(req);
+    return this.alertsService.findAll(baseUrl);
   }
 
-  // @Get(':id')
-  // findOne(@Param('id') id: string) {
-  //   return this.alertsService.findOne(+id);
-  // }
-
-  // @Patch(':id')
-  // update(@Param('id') id: string, @Body() updateAlertDto: UpdateAlertDto) {
-  //   return this.alertsService.update(+id, updateAlertDto);
-  // }
-
-  // @Delete(':id')
-  // remove(@Param('id') id: string) {
-  //   return this.alertsService.remove(+id);
-  // }
+  @Delete(':id')
+  remove(@Param('id') id: Alerts["id"], @RequestFrom() staff: StaffPayload) {
+    return this.alertsService.remove(id, staff.id);
+  }
 }
