@@ -16,7 +16,7 @@ export class AlertsService {
   private readonly URL_ALERT_IMAGE = '/uploads/compressed/alerts/';
   private readonly logger = new Logger(AlertsService.name);
 
-  async create(createAlertsDto: CreateAlertsDto, staffId: Staff["id"], file: Express.Multer.File, baseUrl: string) {
+  async create(createAlertsDto: CreateAlertsDto, staffId: Staff["id"], file: Express.Multer.File, baseUrl: string): Promise<Alerts> {
     if (!file && !createAlertsDto.personId) {
       throw new BadRequestException("No image or banned person id was given");
     }
@@ -64,7 +64,7 @@ export class AlertsService {
     };
   }
 
-  async findAll(baseUrl: string) {
+  async findAll(baseUrl: string): Promise<Alerts[]> {
     const alerts = await this.prisma.alerts.findMany({
       orderBy: {
         startDate: 'desc'
@@ -88,7 +88,7 @@ export class AlertsService {
     return allAlerts;
   }
 
-  async remove(id: Alerts["id"], staffId: Staff["id"]) {
+  async remove(id: Alerts["id"], staffId: Staff["id"]): Promise<string> {
     const isAdmin = await isAccountAdmin(this.prisma, staffId);
 
     if (!isAdmin) {

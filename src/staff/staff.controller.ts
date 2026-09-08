@@ -10,6 +10,12 @@ export class StaffController {
   constructor(private readonly staffService: StaffService) { }
 
   @Public()
+  @Get()
+  isinitialSetupComplete() {
+    return this.staffService.isInitialSetupComplete();
+  }
+
+  @Public()
   @Post()
   create(
     @Body() createStaffDto: CreateStaffDto,

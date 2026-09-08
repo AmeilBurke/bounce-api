@@ -17,6 +17,10 @@ import { isAccountAdmin, toTitleCase } from '../utils';
 export class StaffService {
   constructor(private prisma: PrismaService) { }
 
+  async isInitialSetupComplete(): Promise<boolean> {
+    return await this.prisma.staff.count() > 0;
+  }
+
   async create(createStaffDto: CreateStaffDto, staff?: StaffPayload): Promise<StaffEntity> {
     const staffCount = await this.prisma.staff.count();
     const isFirstAccount = staffCount === 0;
