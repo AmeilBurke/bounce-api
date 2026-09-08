@@ -1,18 +1,12 @@
 import { IsNumber, IsOptional, IsString } from "class-validator";
-import { Alert } from "../../generated/prisma/client";
+import { Alerts } from "../../generated/prisma/client";
 
-export class CreateAlertDto {
-
-    @IsNumber()
-    reason: Alert["reason"];
+export class CreateAlertsDto {
 
     @IsString()
-    imagePath: Alert["imagePath"];
-
-    @IsNumber()
-    createdById: Alert["id"];
+    reason: Alerts["reason"];
 
     @IsOptional()
     @IsNumber()
-    personId?: Alert["personId"];
+    personId?: Alerts["personId"];
 }

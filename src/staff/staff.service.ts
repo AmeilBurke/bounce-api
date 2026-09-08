@@ -9,8 +9,9 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { PrismaService } from '../prisma.service';
 import { StaffEntity } from './staff.entity';
 import * as argon2 from 'argon2';
-import { Prisma, Role, Staff } from '../generated/prisma/client';
+import { Prisma, Roles, Staff } from '../generated/prisma/client';
 import type { StaffPayload } from '../auth/staff-payload.interface';
+import { toTitleCase } from '../utils';
 
 @Injectable()
 export class StaffService {
@@ -38,8 +39,8 @@ export class StaffService {
         data: {
           email: createStaffDto.email.toLowerCase().trim(),
           password: hashedPassword,
-          name: createStaffDto.name.toLowerCase(),
-          role: isFirstAccount ? Role.ADMIN : createStaffDto.role,
+          name: toTitleCase(createStaffDto.name),
+          role: isFirstAccount ? Roles.ADMIN : createStaffDto.role,
         },
       });
 
@@ -79,7 +80,7 @@ export class StaffService {
       }
     });
 
-    return requestFrom?.role === Role.ADMIN;
+    return requestFrom?.role === Roles.ADMIN;
   }
 
   // update(id: number, updateStaffDto: UpdateStaffDto) {

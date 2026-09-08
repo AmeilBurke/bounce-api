@@ -13,7 +13,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Role {
+enum Roles {
   ADMIN
   BOUNCER
   // VENUE_MANAGER
@@ -25,14 +25,14 @@ model Staff {
   email    String  @unique
   password String
   name     String
-  role     Role
-  alerts   Alert[] @relation("AlertCreator")
+  role     Roles
+  alerts   Alerts[] @relation("AlertCreator")
   // venueManagerAssignments VenueManager[]
   // dutyManagerAssignments  DutyManager[]
   // bansCreated             Ban[]          @relation("BanCreator")
 }
 
-model Alert {
+model Alerts {
   id          String   @id @default(uuid())
   reason      String
   imagePath   String

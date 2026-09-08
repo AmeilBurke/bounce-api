@@ -1,5 +1,5 @@
 import { IsEmail, IsEnum, IsString } from 'class-validator';
-import { Role } from '../../generated/prisma/enums.js';
+import { Roles } from '../../generated/prisma/enums.js';
 import { Staff } from '../../generated/prisma/client.js';
 
 export class CreateStaffDto {
@@ -12,6 +12,6 @@ export class CreateStaffDto {
   @IsString()
   name: Staff["name"];
 
-  @IsEnum(Role)
+  @IsEnum(Roles)
   role: Staff["role"];
 }

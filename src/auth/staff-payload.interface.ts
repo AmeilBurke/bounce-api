@@ -1,7 +1,9 @@
+import { Staff } from "../generated/prisma/client";
+
 export interface StaffPayload {
-    id: string;
-    email: string;
-    name: string;
-    role: string;
+    id: Staff["id"];
+    email: Staff["email"];
+    name: Staff["name"];
+    role: Staff["role"];
     iat: number;
 }
