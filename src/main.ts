@@ -12,7 +12,8 @@ async function bootstrap() {
     prefix: '/uploads',
   });
   app.enableCors({
-    origin: ['http://192.168.1.95:5173', 'http://localhost:5173'], // your Vite dev server
+    // origin: ['http://192.168.1.95:5173', 'http://localhost:5173']
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   });
   await app.listen(process.env.PORT ?? 3000);

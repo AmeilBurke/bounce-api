@@ -12,13 +12,14 @@ import * as argon2 from 'argon2';
 import { Prisma, Roles, Staff } from '../generated/prisma/client';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { isAccountAdmin, toTitleCase } from '../utils';
+import { UpdateStaffDto } from './dto/update-staff.dto';
 
 @Injectable()
 export class StaffService {
   constructor(private prisma: PrismaService) { }
 
   async isInitialSetupComplete(): Promise<boolean> {
-    return await this.prisma.staff.count() > 0;
+    return (await this.prisma.staff.count()) > 0;
   }
 
   async create(createStaffDto: CreateStaffDto, staff?: StaffPayload): Promise<StaffEntity> {
@@ -36,13 +37,11 @@ export class StaffService {
       }
     }
 
-    const hashedPassword = await argon2.hash(createStaffDto.password);
-
     try {
       const newStaff = await this.prisma.staff.create({
         data: {
           email: createStaffDto.email.toLowerCase().trim(),
-          password: hashedPassword,
+          password: await argon2.hash(createStaffDto.password),
           name: toTitleCase(createStaffDto.name),
           role: isFirstAccount ? Roles.ADMIN : createStaffDto.role,
         },
@@ -65,7 +64,7 @@ export class StaffService {
     return allStaff.map((staff) => new StaffEntity(staff));
   }
 
-  async findOneByEmail(email: string): Promise<Staff> {
+  async findOneByEmail(email: Staff['email']): Promise<Staff> {
     const foundStaff = await this.prisma.staff.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
@@ -77,11 +76,54 @@ export class StaffService {
     return foundStaff;
   }
 
-  // update(id: number, updateStaffDto: UpdateStaffDto) {
-  //   return `This action updates a #${id} staff`;
-  // }
+  async update(id: Staff['id'], updateStaffDto: UpdateStaffDto, staff: StaffPayload) {
+    const isAdmin = await isAccountAdmin(this.prisma, staff.id);
+    if (!isAdmin || staff.id !== id) {
+      throw new ForbiddenException();
+    }
 
-  // remove(id: number) {
-  //   return `This action removes a #${id} staff`;
-  // }
+    try {
+      const updatedStaff = await this.prisma.staff.update({
+        where: {
+          id: id,
+        },
+        data: {
+          email: updateStaffDto.email ? updateStaffDto.email.toLowerCase().trim() : undefined,
+          password: updateStaffDto.password
+            ? await argon2.hash(updateStaffDto.password)
+            : undefined,
+          name: updateStaffDto.name ? toTitleCase(updateStaffDto.name) : undefined,
+          role: updateStaffDto.role ? updateStaffDto.role : undefined,
+        },
+      });
+      return new StaffEntity(updatedStaff);
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  // need to remove account & link anything to them back to admin doing deleting
+  async remove(id: Staff['id'], staff: StaffPayload) {
+    const isAdmin = await isAccountAdmin(this.prisma, staff.id);
+    if (!isAdmin) {
+      throw new ForbiddenException();
+    }
+
+    await this.prisma.alerts.updateMany({
+      where: {
+        createdById: id,
+      },
+      data: {
+        createdById: staff.id,
+      },
+    });
+
+    const deletedAccount = await this.prisma.staff.delete({
+      where: {
+        id: id,
+      },
+    });
+
+    return `Deleted account of ${deletedAccount.name}`;
+  }
 }

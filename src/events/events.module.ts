@@ -15,5 +15,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     }),
   ],
   providers: [EventsGateway, PrismaService],
+  exports: [EventsGateway]
 })
 export class EventsModule { }

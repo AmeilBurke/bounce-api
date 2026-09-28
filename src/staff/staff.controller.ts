@@ -4,13 +4,15 @@ import { CreateStaffDto } from './dto/create-staff.dto.js';
 import { Public } from '../auth/public.decorator.js';
 import { RequestFrom } from '../auth/request-from.decorator.js';
 import type { StaffPayload } from '../auth/staff-payload.interface.js';
+import { UpdateStaffDto } from './dto/update-staff.dto.js';
+import { Staff } from '../generated/prisma/client.js';
 
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) { }
 
   @Public()
-  @Get()
+  @Get('is-setup-complete')
   isinitialSetupComplete() {
     return this.staffService.isInitialSetupComplete();
   }
@@ -30,7 +32,7 @@ export class StaffController {
   }
 
   @Get(':email')
-  findOneByEmail(@Param('email') email: string) {
+  findOneByEmail(@Param('email') email: Staff["email"]) {
     return this.staffService.findOneByEmail(email);
   }
 
@@ -39,13 +41,13 @@ export class StaffController {
   //   return this.staffService.findOne(+id);
   // }
 
-  // @Patch(':id')
-  // update(@Param('id') id: string, @Body() updateStaffDto: UpdateStaffDto) {
-  //   return this.staffService.update(+id, updateStaffDto);
-  // }
+  @Patch(':id')
+  update(@Param('id') id: Staff["id"], @Body() updateStaffDto: UpdateStaffDto, @RequestFrom() staff: StaffPayload) {
+    return this.staffService.update(id, updateStaffDto, staff);
+  }
 
-  // @Delete(':id')
-  // remove(@Param('id') id: string) {
-  //   return this.staffService.remove(+id);
-  // }
+  @Delete(':id')
+  remove(@Param('id') id: Staff["id"], @RequestFrom() staff: StaffPayload) {
+    return this.staffService.remove(id, staff);
+  }
 }

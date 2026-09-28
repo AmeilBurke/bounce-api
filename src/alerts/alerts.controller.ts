@@ -1,7 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFile, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFile, Req } from '@nestjs/common';
 import { AlertsService } from './alerts.service';
 import { CreateAlertsDto } from './dto/create-alert.dto';
-import { UpdateAlertDto } from './dto/update-alert.dto';
 import { RequestFrom } from '../auth/request-from.decorator';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { FileInterceptor } from '@nestjs/platform-express';

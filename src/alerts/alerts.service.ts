@@ -7,14 +7,23 @@ import path from 'path';
 import * as fs from "fs";
 import sharp from 'sharp';
 import { Cron } from '@nestjs/schedule';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class AlertsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private events: EventsGateway,
+  ) { }
 
   private readonly ALERT_IMAGE_FOLDER = path.join(process.cwd(), 'uploads', 'compressed', 'alerts');
   private readonly URL_ALERT_IMAGE = '/uploads/compressed/alerts/';
   private readonly logger = new Logger(AlertsService.name);
+
+  async onModuleInit() {
+    await fs.promises.mkdir(this.ALERT_IMAGE_FOLDER, { recursive: true });
+  }
+
 
   async create(createAlertsDto: CreateAlertsDto, staffId: Staff["id"], file: Express.Multer.File, baseUrl: string): Promise<Alerts> {
     if (!file && !createAlertsDto.personId) {
@@ -57,6 +66,8 @@ export class AlertsService {
         personId: createAlertsDto.personId,
       },
     });
+
+    this.events.notifyAlertCreated(staffId);
 
     return {
       ...result,
@@ -110,6 +121,9 @@ export class AlertsService {
     }
 
     await this.prisma.alerts.delete({ where: { id } });
+
+    this.events.notifyAlertDeleted();
+
     return 'Deleted alert';
   }
 
