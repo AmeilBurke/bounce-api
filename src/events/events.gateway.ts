@@ -52,12 +52,16 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         console.log(`Client disconnected: ${client.id}`);
     }
 
-    notifyAlertCreated(staffId: Staff['id']) {
-        // this.server.except(`staff:${staffId}`).emit('alert_created');
-        this.server.emit('alert_created');
+    // notifyAlertCreated(staffId: Staff['id']) {
+    //     // this.server.except(`staff:${staffId}`).emit('alert_created');
+    //     this.server.emit('alert_created');
+    // }
+
+    notifyAlertsChanged() {
+        this.server.emit('alert');
     }
 
-    notifyAlertDeleted() {
-        this.server.emit('alert_deleted');
+    notifyStaffChanged() {
+        this.server.emit('staff');
     }
 }

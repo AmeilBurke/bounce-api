@@ -13,10 +13,11 @@ import { Prisma, Roles, Staff } from '../generated/prisma/client';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { isAccountAdmin, toTitleCase } from '../utils';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class StaffService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService, private events: EventsGateway) { }
 
   async isInitialSetupComplete(): Promise<boolean> {
     return (await this.prisma.staff.count()) > 0;
@@ -47,8 +48,13 @@ export class StaffService {
         },
       });
 
+      this.events.notifyStaffChanged();
+
       return new StaffEntity(newStaff);
     } catch (err) {
+      console.log(err);
+
+      // need to figure out what to return when this happens
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new ConflictException('Email already in use');
       }
@@ -77,8 +83,9 @@ export class StaffService {
   }
 
   async update(id: Staff['id'], updateStaffDto: UpdateStaffDto, staff: StaffPayload) {
+
     const isAdmin = await isAccountAdmin(this.prisma, staff.id);
-    if (!isAdmin || staff.id !== id) {
+    if (!isAdmin && staff.id !== id) {
       throw new ForbiddenException();
     }
 
@@ -96,8 +103,11 @@ export class StaffService {
           role: updateStaffDto.role ? updateStaffDto.role : undefined,
         },
       });
+      this.events.notifyStaffChanged();
+
       return new StaffEntity(updatedStaff);
     } catch (err) {
+      console.log(err);
       throw err;
     }
   }
@@ -123,6 +133,8 @@ export class StaffService {
         id: id,
       },
     });
+
+    this.events.notifyStaffChanged();
 
     return `Deleted account of ${deletedAccount.name}`;
   }

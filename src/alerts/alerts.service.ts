@@ -67,7 +67,7 @@ export class AlertsService {
       },
     });
 
-    this.events.notifyAlertCreated(staffId);
+    this.events.notifyAlertsChanged();
 
     return {
       ...result,
@@ -122,7 +122,7 @@ export class AlertsService {
 
     await this.prisma.alerts.delete({ where: { id } });
 
-    this.events.notifyAlertDeleted();
+    this.events.notifyAlertsChanged();
 
     return 'Deleted alert';
   }
