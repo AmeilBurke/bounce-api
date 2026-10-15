@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -87,6 +88,30 @@ export class StaffService {
     const isAdmin = await isAccountAdmin(this.prisma, staff.id);
     if (!isAdmin && staff.id !== id) {
       throw new ForbiddenException();
+    }
+
+    if (!isAdmin && updateStaffDto.role !== undefined) {
+      throw new ForbiddenException('Only admins can change roles');
+    }
+
+    // Block demoting the last admin
+    if (updateStaffDto.role && updateStaffDto.role !== Roles.ADMIN) {
+      const target = await this.prisma.staff.findUnique({
+        where: { id },
+        select: { role: true },
+      });
+      if (!target) {
+        throw new NotFoundException('Staff not found');
+      }
+
+      if (target.role === Roles.ADMIN) {
+        const adminCount = await this.prisma.staff.count({
+          where: { role: Roles.ADMIN },
+        });
+        if (adminCount <= 1) {
+          throw new BadRequestException('The last admin account cannot be demoted');
+        }
+      }
     }
 
     try {
