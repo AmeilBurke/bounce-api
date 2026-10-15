@@ -44,7 +44,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
     handleConnection(client: Socket) {
         const staff: StaffPayload = client.data.staff;
-        client.join(`staff:${staff.id}`); // assumes StaffPayload has an id, use whichever field identifies them
+        client.join(`staff:${staff.id}`);
         console.log(`${staff.name} has connected with ID: ${client.id}`);
     }
 
@@ -63,5 +63,9 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
     notifyStaffChanged() {
         this.server.emit('staff');
+    }
+
+    notifyStaffDeleted(staffToDelete: Staff["id"]) {
+        this.server.to(`staff:${staffToDelete}`).emit('delete');
     }
 }

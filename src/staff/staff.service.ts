@@ -136,6 +136,8 @@ export class StaffService {
 
     this.events.notifyStaffChanged();
 
+    this.events.notifyStaffDeleted(deletedAccount.id);
+
     return `Deleted account of ${deletedAccount.name}`;
   }
 }
