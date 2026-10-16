@@ -35,7 +35,7 @@ export class AlertsService {
     if (file) {
       try {
         const webpFilename = `${file.filename}.webp`;
-        await sharp(file.path).webp({ quality: 75 }).toFile(path.join(this.ALERT_IMAGE_FOLDER, webpFilename));
+        await sharp(file.path).rotate().webp({ quality: 75 }).toFile(path.join(this.ALERT_IMAGE_FOLDER, webpFilename));
         imagePath = webpFilename;
       } finally {
         await fs.promises.unlink(file.path).catch(() => { });
