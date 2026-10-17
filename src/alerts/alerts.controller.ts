@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFile, Req } from '@nestjs/common';
 import { AlertsService } from './alerts.service';
-import { CreateAlertsDto } from './dto/create-alert.dto';
+import { CreateAlertDto } from './dto/create-alert.dto';
 import { RequestFrom } from '../auth/request-from.decorator';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -8,7 +8,7 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { getBaseUrl, imageFileValidator } from '../utils';
 import express from "express";
-import { Alerts } from '../generated/prisma/client';
+import { Alert } from '../generated/prisma/client';
 
 @Controller('alerts')
 export class AlertsController {
@@ -31,7 +31,7 @@ export class AlertsController {
     }),
   )
   @Post()
-  create(@Body() createAlertsDto: CreateAlertsDto, @RequestFrom() staff: StaffPayload, @Req() req: express.Request, @UploadedFile() file: Express.Multer.File,) {
+  create(@Body() createAlertsDto: CreateAlertDto, @RequestFrom() staff: StaffPayload, @Req() req: express.Request, @UploadedFile() file: Express.Multer.File,) {
     const baseUrl = getBaseUrl(req);
     return this.alertsService.create(createAlertsDto, staff.id, file, baseUrl);
   }
@@ -43,7 +43,7 @@ export class AlertsController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: Alerts["id"], @RequestFrom() staff: StaffPayload) {
+  remove(@Param('id') id: Alert["id"], @RequestFrom() staff: StaffPayload) {
     return this.alertsService.remove(id, staff.id);
   }
 }

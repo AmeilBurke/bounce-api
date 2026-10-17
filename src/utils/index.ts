@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { Request } from 'express';
-import { PrismaClient, Roles, Staff } from "../generated/prisma/client";
+import { PrismaClient, Role, Staff } from "../generated/prisma/client";
 
 export function toTitleCase(input: string): string {
   return input
@@ -50,5 +50,5 @@ export async function isAccountAdmin(
     where: { id: staffId },
   });
 
-  return requestFrom?.role === Roles.ADMIN;
+  return requestFrom?.role === Role.ADMIN;
 }

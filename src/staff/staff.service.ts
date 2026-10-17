@@ -10,7 +10,7 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { PrismaService } from '../prisma.service';
 import { StaffEntity } from './staff.entity';
 import * as argon2 from 'argon2';
-import { Prisma, Roles, Staff } from '../generated/prisma/client';
+import { Prisma, Role, Staff } from '../generated/prisma/client';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { isAccountAdmin, toTitleCase } from '../utils';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -39,13 +39,37 @@ export class StaffService {
       }
     }
 
+    const role = isFirstAccount ? Role.ADMIN : createStaffDto.role;
+    const venueIds = [...new Set(createStaffDto.venueManages ?? [])];
+    const dutyVenueIds = [...new Set(createStaffDto.dutyManages ?? [])];
+
+    if (venueIds.length > 0 && role !== Role.VENUE_MANAGER) {
+      throw new BadRequestException('Only venue managers can be assigned venues to manage');
+    }
+
+    if (
+      dutyVenueIds.length > 0 &&
+      role !== Role.VENUE_MANAGER &&
+      role !== Role.DUTY_MANAGER
+    ) {
+      throw new BadRequestException(
+        'Only venue managers and duty managers can be assigned venues to duty manage',
+      );
+    }
+
     try {
       const newStaff = await this.prisma.staff.create({
         data: {
           email: createStaffDto.email.toLowerCase().trim(),
           password: await argon2.hash(createStaffDto.password),
           name: toTitleCase(createStaffDto.name),
-          role: isFirstAccount ? Roles.ADMIN : createStaffDto.role,
+          role,
+          venueManages: {
+            create: venueIds.map((venueId) => ({ venueId })),
+          },
+          dutyManages: {
+            create: dutyVenueIds.map((venueId) => ({ venueId })),
+          },
         },
       });
 
@@ -55,9 +79,13 @@ export class StaffService {
     } catch (err) {
       console.log(err);
 
-      // need to figure out what to return when this happens
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Email already in use');
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2002') {
+          throw new ConflictException('Email already in use');
+        }
+        if (err.code === 'P2003') {
+          throw new BadRequestException('One or more venues do not exist');
+        }
       }
       throw err;
     }
@@ -95,7 +123,7 @@ export class StaffService {
     }
 
     // Block demoting the last admin
-    if (updateStaffDto.role && updateStaffDto.role !== Roles.ADMIN) {
+    if (updateStaffDto.role && updateStaffDto.role !== Role.ADMIN) {
       const target = await this.prisma.staff.findUnique({
         where: { id },
         select: { role: true },
@@ -104,9 +132,9 @@ export class StaffService {
         throw new NotFoundException('Staff not found');
       }
 
-      if (target.role === Roles.ADMIN) {
+      if (target.role === Role.ADMIN) {
         const adminCount = await this.prisma.staff.count({
-          where: { role: Roles.ADMIN },
+          where: { role: Role.ADMIN },
         });
         if (adminCount <= 1) {
           throw new BadRequestException('The last admin account cannot be demoted');
@@ -144,7 +172,7 @@ export class StaffService {
       throw new ForbiddenException();
     }
 
-    await this.prisma.alerts.updateMany({
+    await this.prisma.alert.updateMany({
       where: {
         createdById: id,
       },

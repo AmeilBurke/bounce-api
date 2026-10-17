@@ -24,8 +24,8 @@ model Staff {
 
   alerts        Alert[]
   bans          Ban[]
-  venueManagers VenueManager[]
-  dutyManagers  DutyManager[]
+  venueManages VenueManager[]
+  dutyManages  DutyManager[]
 }
 
 model Alert {

@@ -1,12 +1,12 @@
 import { IsNumber, IsOptional, IsString } from "class-validator";
-import { Alerts } from "../../generated/prisma/client";
+import { Alert } from "../../generated/prisma/client";
 
-export class CreateAlertsDto {
+export class CreateAlertDto {
 
     @IsString()
-    reason: Alerts["reason"];
+    reason: Alert["reason"];
 
     @IsOptional()
     @IsNumber()
-    personId?: Alerts["personId"];
+    bannedPersonId?: Alert["bannedPersonId"];
 }

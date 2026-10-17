@@ -1,10 +1,16 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
-import { CreateAlertsDto } from './dto/create-alert.dto';
-import { Alerts, Prisma, Staff } from '../generated/prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { CreateAlertDto } from './dto/create-alert.dto';
+import { Alert, Prisma, Staff } from '../generated/prisma/client';
 import { PrismaService } from '../prisma.service';
 import { capitalize, isAccountAdmin } from '../utils';
 import path from 'path';
-import * as fs from "fs";
+import * as fs from 'fs';
 import sharp from 'sharp';
 import { Cron } from '@nestjs/schedule';
 import { EventsGateway } from '../events/events.gateway';
@@ -18,109 +24,106 @@ export class AlertsService {
 
   private readonly ALERT_IMAGE_FOLDER = path.join(process.cwd(), 'uploads', 'compressed', 'alerts');
   private readonly URL_ALERT_IMAGE = '/uploads/compressed/alerts/';
+  private readonly BANNEDPERSON_ALERT_IMAGE = '/uploads/compressed/people/';
   private readonly logger = new Logger(AlertsService.name);
 
   async onModuleInit() {
     await fs.promises.mkdir(this.ALERT_IMAGE_FOLDER, { recursive: true });
   }
 
+  async create(
+    createAlertDto: CreateAlertDto,
+    staffId: Staff['id'],
+    file: Express.Multer.File,
+    baseUrl: string,
+  ): Promise<Alert> {
+    const bannedPersonId = createAlertDto.bannedPersonId || undefined;
+    let createdFile: string | undefined;
 
-  async create(createAlertsDto: CreateAlertsDto, staffId: Staff["id"], file: Express.Multer.File, baseUrl: string): Promise<Alerts> {
-    if (!file && !createAlertsDto.personId) {
-      throw new BadRequestException("No image or banned person id was given");
-    }
-
-    let imagePath: string | undefined;
-
-    if (file) {
-      try {
-        const webpFilename = `${file.filename}.webp`;
-        await sharp(file.path).rotate().webp({ quality: 75 }).toFile(path.join(this.ALERT_IMAGE_FOLDER, webpFilename));
-        imagePath = webpFilename;
-      } finally {
-        await fs.promises.unlink(file.path).catch(() => { });
+    try {
+      if (!file && !bannedPersonId) {
+        throw new BadRequestException('No image or banned person id was given');
       }
-    }
 
-    // if (createAlertsDto.personId) {
-    //   const bannedPerson = await this.prisma.bannedPerson.findUniqueOrThrow({
-    //     where: { id: createAlertDto.personId },
-    //     select: { imagePath: true },
-    //   });
+      let imagePath: string;
 
+      if (bannedPersonId) {
+        const person = await this.prisma.bannedPerson.findUniqueOrThrow({
+          where: { id: bannedPersonId },
+          select: { imagePath: true },
+        });
 
-    //   if (!imagePath) {
-    //     imagePath = bannedPerson.imagePath ?? undefined;
-    //   }
-    // }
-
-    if (!imagePath) {
-      throw new BadRequestException("No image could be resolved for this alert");
-    }
-
-    const result = await this.prisma.alerts.create({
-      data: {
-        reason: capitalize(createAlertsDto.reason),
-        imagePath: imagePath,
-        createdById: staffId,
-        personId: createAlertsDto.personId,
-      },
-    });
-
-    this.events.notifyAlertsChanged();
-
-    return {
-      ...result,
-      imagePath: `${baseUrl}${this.URL_ALERT_IMAGE}${result.imagePath}`,
-    };
-  }
-
-  async findAll(baseUrl: string): Promise<Alerts[]> {
-    const alerts = await this.prisma.alerts.findMany({
-      orderBy: {
-        startDate: 'desc'
-      }
-    })
-
-    const allAlerts = alerts.map((alert) => {
-      if (alert.personId) {
-        return {
-          ...alert,
-          imagePath: `${baseUrl}/uploads/compressed/people/${alert.imagePath}`,
-        };
+        imagePath = person.imagePath;
       } else {
-        return {
-          ...alert,
-          imagePath: `${baseUrl}/uploads/compressed/alerts/${alert.imagePath}`,
-        };
+        const webpFilename = `${file.filename}.webp`;
+        createdFile = path.join(this.ALERT_IMAGE_FOLDER, webpFilename);
+        await sharp(file.path).rotate().webp({ quality: 75 }).toFile(createdFile);
+        imagePath = webpFilename;
       }
-    });
 
-    return allAlerts;
+      const result = await this.prisma.alert.create({
+        data: {
+          reason: capitalize(createAlertDto.reason),
+          imagePath,
+          createdById: staffId,
+          bannedPersonId,
+        },
+      });
+
+      this.events.notifyAlertsChanged();
+
+      const folder = result.bannedPersonId ? this.BANNEDPERSON_ALERT_IMAGE : this.URL_ALERT_IMAGE;
+      return { ...result, imagePath: `${baseUrl}${folder}${result.imagePath}` };
+
+    } catch (err) {
+      if (createdFile) await fs.promises.rm(createdFile, { force: true });
+
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('An alert already exists for this person');
+      }
+      throw err;
+    } finally {
+      if (file) await fs.promises.unlink(file.path).catch(() => { });
+    }
   }
 
-  async remove(id: Alerts["id"], staffId: Staff["id"]): Promise<string> {
+  async findAll(baseUrl: string): Promise<Alert[]> {
+    const alerts = await this.prisma.alert.findMany({
+      orderBy: { startDate: 'desc' },
+    });
+
+    return alerts.map((alert) => {
+      const folder = alert.bannedPersonId
+        ? this.BANNEDPERSON_ALERT_IMAGE
+        : this.URL_ALERT_IMAGE;
+
+      return { ...alert, imagePath: `${baseUrl}${folder}${alert.imagePath}` };
+    });
+  }
+
+  async remove(id: Alert['id'], staffId: Staff['id']): Promise<string> {
     const isAdmin = await isAccountAdmin(this.prisma, staffId);
 
     if (!isAdmin) {
       throw new ForbiddenException();
     }
 
-    const alertToDelete = await this.prisma.alerts.findUniqueOrThrow({
+    const alertToDelete = await this.prisma.alert.findUniqueOrThrow({
       where: { id },
       select: {
-        personId: true,
-        imagePath: true
+        bannedPersonId: true,
+        imagePath: true,
       },
     });
 
-    if (!alertToDelete.personId) {
+    await this.prisma.alert.delete({ where: { id } });
+
+    if (!alertToDelete.bannedPersonId) {
       await fs.promises.rm(
-        path.join(this.ALERT_IMAGE_FOLDER, alertToDelete.imagePath)
+        path.join(this.ALERT_IMAGE_FOLDER, alertToDelete.imagePath),
+        { force: true },
       );
     }
-
-    await this.prisma.alerts.delete({ where: { id } });
 
     this.events.notifyAlertsChanged();
 
@@ -128,27 +131,33 @@ export class AlertsService {
   }
 
   //cronjob to delete all next day @ 5:00am
-  @Cron('0 5 * * *')
-  // @Cron('* * * * *')
-  private async removeAll(): Promise<void> {
-    const allAlertsWithoutBannedPersonId = await this.prisma.alerts.findMany({
-      where: {
-        personId: null
-      },
-      select: {
-        imagePath: true
-      },
-    });
+  @Cron('0 5 * * *', { timeZone: 'Pacific/Auckland' })
+  async removeAll(): Promise<void> {
+    try {
+      const alerts = await this.prisma.alert.findMany({
+        select: { id: true, imagePath: true, bannedPersonId: true },
+      });
 
-    await Promise.allSettled(
-      allAlertsWithoutBannedPersonId.map(({ imagePath }) =>
-        fs.promises.rm(path.join(this.ALERT_IMAGE_FOLDER, imagePath), { force: true })
-      )
-    );
+      if (alerts.length === 0) return;
 
-    const { count } = await this.prisma.alerts.deleteMany();
+      const { count } = await this.prisma.alert.deleteMany({
+        where: { id: { in: alerts.map((a) => a.id) } },
+      });
 
-    this.logger.debug(`Cronjob deleted ${count} alerts on ${new Date()}`);
+      // Only standalone alerts own their image file
+      await Promise.allSettled(
+        alerts
+          .filter((a) => !a.bannedPersonId)
+          .map((a) =>
+            fs.promises.rm(path.join(this.ALERT_IMAGE_FOLDER, a.imagePath), { force: true }),
+          ),
+      );
+
+      this.events.notifyAlertsChanged();
+
+      this.logger.log(`Cronjob deleted ${count} alerts`);
+    } catch (err) {
+      this.logger.error('Cronjob failed to delete alerts', err instanceof Error ? err.stack : String(err));
+    }
   }
-
 }

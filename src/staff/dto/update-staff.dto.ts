@@ -1,6 +1,6 @@
-import { IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
-import { Roles } from '../../generated/prisma/enums.js';
-import { Staff } from '../../generated/prisma/client.js';
+import { IsArray, IsEmail, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Role } from '../../generated/prisma/enums.js';
+import { DutyManager, Staff, VenueManager } from '../../generated/prisma/client.js';
 
 export class UpdateStaffDto {
   @IsOptional()
@@ -17,6 +17,16 @@ export class UpdateStaffDto {
 
   @IsOptional()
   @IsEnum
-    (Roles)
+    (Role)
   role: Staff["role"];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  venueManages?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  dutyManages?: DutyManager[];
 }
