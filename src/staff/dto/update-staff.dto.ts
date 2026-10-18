@@ -28,5 +28,5 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsArray()
   @IsUUID('all', { each: true })
-  dutyManages?: DutyManager[];
+  dutyManages?: string[];
 }

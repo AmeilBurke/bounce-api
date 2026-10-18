@@ -94,6 +94,10 @@ export class StaffService {
   async findAll(): Promise<StaffEntity[]> {
     const allStaff = await this.prisma.staff.findMany({
       orderBy: [{ role: 'asc' }, { name: 'asc' }],
+      include: {
+        venueManages: true,
+        dutyManages: true
+      }
     });
 
     return allStaff.map((staff) => new StaffEntity(staff));
@@ -112,7 +116,6 @@ export class StaffService {
   }
 
   async update(id: Staff['id'], updateStaffDto: UpdateStaffDto, staff: StaffPayload) {
-
     const isAdmin = await isAccountAdmin(this.prisma, staff.id);
     if (!isAdmin && staff.id !== id) {
       throw new ForbiddenException();
@@ -122,31 +125,67 @@ export class StaffService {
       throw new ForbiddenException('Only admins can change roles');
     }
 
-    // Block demoting the last admin
-    if (updateStaffDto.role && updateStaffDto.role !== Role.ADMIN) {
-      const target = await this.prisma.staff.findUnique({
-        where: { id },
-        select: { role: true },
-      });
-      if (!target) {
-        throw new NotFoundException('Staff not found');
-      }
+    if (
+      !isAdmin &&
+      (updateStaffDto.venueManages !== undefined || updateStaffDto.dutyManages !== undefined)
+    ) {
+      throw new ForbiddenException('Only admins can change venue assignments');
+    }
 
-      if (target.role === Role.ADMIN) {
-        const adminCount = await this.prisma.staff.count({
-          where: { role: Role.ADMIN },
-        });
-        if (adminCount <= 1) {
-          throw new BadRequestException('The last admin account cannot be demoted');
-        }
+    const target = await this.prisma.staff.findUnique({
+      where: { id },
+      select: { role: true },
+    });
+    if (!target) {
+      throw new NotFoundException('Staff not found');
+    }
+
+    if (updateStaffDto.role && updateStaffDto.role !== Role.ADMIN && target.role === Role.ADMIN) {
+      const adminCount = await this.prisma.staff.count({
+        where: { role: Role.ADMIN },
+      });
+      if (adminCount <= 1) {
+        throw new BadRequestException('The last admin account cannot be demoted');
       }
+    }
+
+    const newRole = updateStaffDto.role ?? target.role;
+    const roleChanged = newRole !== target.role;
+
+    // undefined = leave untouched, array = replace the full set
+    let venueIds =
+      updateStaffDto.venueManages !== undefined
+        ? [...new Set(updateStaffDto.venueManages)]
+        : undefined;
+    let dutyVenueIds =
+      updateStaffDto.dutyManages !== undefined
+        ? [...new Set(updateStaffDto.dutyManages)]
+        : undefined;
+
+    const canManageVenues = newRole === Role.VENUE_MANAGER;
+    const canDutyManage = newRole === Role.VENUE_MANAGER || newRole === Role.DUTY_MANAGER;
+
+    if (venueIds && venueIds.length > 0 && !canManageVenues) {
+      throw new BadRequestException('Only venue managers can be assigned venues to manage');
+    }
+
+    if (dutyVenueIds && dutyVenueIds.length > 0 && !canDutyManage) {
+      throw new BadRequestException(
+        'Only venue managers and duty managers can be assigned venues to duty manage',
+      );
+    }
+
+    // Role changed to one that no longer allows existing assignments: clear them
+    if (roleChanged && !canManageVenues) {
+      venueIds = [];
+    }
+    if (roleChanged && !canDutyManage) {
+      dutyVenueIds = [];
     }
 
     try {
       const updatedStaff = await this.prisma.staff.update({
-        where: {
-          id: id,
-        },
+        where: { id },
         data: {
           email: updateStaffDto.email ? updateStaffDto.email.toLowerCase().trim() : undefined,
           password: updateStaffDto.password
@@ -154,6 +193,20 @@ export class StaffService {
             : undefined,
           name: updateStaffDto.name ? toTitleCase(updateStaffDto.name) : undefined,
           role: updateStaffDto.role ? updateStaffDto.role : undefined,
+          venueManages:
+            venueIds !== undefined
+              ? {
+                deleteMany: {},
+                create: venueIds.map((venueId) => ({ venueId })),
+              }
+              : undefined,
+          dutyManages:
+            dutyVenueIds !== undefined
+              ? {
+                deleteMany: {},
+                create: dutyVenueIds.map((venueId) => ({ venueId })),
+              }
+              : undefined,
         },
       });
       this.events.notifyStaffChanged();
@@ -161,36 +214,54 @@ export class StaffService {
       return new StaffEntity(updatedStaff);
     } catch (err) {
       console.log(err);
+
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2002') {
+          throw new ConflictException('Email already in use');
+        }
+        if (err.code === 'P2003') {
+          throw new BadRequestException('One or more venues do not exist');
+        }
+        if (err.code === 'P2025') {
+          throw new NotFoundException('Staff not found');
+        }
+      }
       throw err;
     }
   }
 
-  // need to remove account & link anything to them back to admin doing deleting
   async remove(id: Staff['id'], staff: StaffPayload) {
     const isAdmin = await isAccountAdmin(this.prisma, staff.id);
     if (!isAdmin) {
       throw new ForbiddenException();
     }
 
-    await this.prisma.alert.updateMany({
-      where: {
-        createdById: id,
-      },
-      data: {
-        createdById: staff.id,
-      },
-    });
+    if (id === staff.id) {
+      throw new BadRequestException('You cannot delete your own account');
+    }
 
-    const deletedAccount = await this.prisma.staff.delete({
-      where: {
-        id: id,
-      },
-    });
+    try {
+      const deletedAccount = await this.prisma.$transaction(async (tx) => {
+        await tx.alert.updateMany({
+          where: { createdById: id },
+          data: { createdById: staff.id },
+        });
 
-    this.events.notifyStaffChanged();
+        await tx.venueManager.deleteMany({ where: { staffId: id } });
+        await tx.dutyManager.deleteMany({ where: { staffId: id } });
 
-    this.events.notifyStaffDeleted(deletedAccount.id);
+        return tx.staff.delete({ where: { id } });
+      });
 
-    return `Deleted account of ${deletedAccount.name}`;
+      this.events.notifyStaffChanged();
+      this.events.notifyStaffDeleted(deletedAccount.id);
+
+      return `Deleted account of ${deletedAccount.name}`;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new NotFoundException('Staff not found');
+      }
+      throw err;
+    }
   }
 }
