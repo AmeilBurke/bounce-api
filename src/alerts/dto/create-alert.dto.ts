@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString } from "class-validator";
+import { IsOptional, IsString, IsUUID } from "class-validator";
 import { Alert } from "../../generated/prisma/client";
 
 export class CreateAlertDto {
@@ -7,6 +7,6 @@ export class CreateAlertDto {
     reason: Alert["reason"];
 
     @IsOptional()
-    @IsNumber()
+    @IsUUID()
     bannedPersonId?: Alert["bannedPersonId"];
 }

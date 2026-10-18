@@ -1,12 +1,12 @@
 // staff.entity.ts
 import { Exclude } from 'class-transformer';
-import { Roles } from '../generated/prisma/enums.js';
+import { Role } from '../generated/prisma/enums.js';
 
 export class StaffEntity {
   id: string;
   email: string;
   name: string;
-  role: Roles;
+  role: Role;
 
   @Exclude()
   password: string;

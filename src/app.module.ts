@@ -7,9 +7,10 @@ import { StaffModule } from './staff/staff.module.js';
 import { AuthenticationModule } from './auth/auth.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { EventsModule } from './events/events.module.js';
+import { VenuesModule } from './venues/venues.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), ScheduleModule.forRoot(), StaffModule, AuthenticationModule, AlertsModule, EventsModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), ScheduleModule.forRoot(), StaffModule, AuthenticationModule, AlertsModule, EventsModule, VenuesModule],
   controllers: [AppController],
   providers: [AppService],
 })

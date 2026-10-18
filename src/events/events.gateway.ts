@@ -65,6 +65,10 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         this.server.emit('staff');
     }
 
+    notifyVenuesChanged() {
+        this.server.emit('venue');
+    }
+
     notifyStaffDeleted(staffToDelete: Staff["id"]) {
         this.server.to(`staff:${staffToDelete}`).emit('delete');
     }
