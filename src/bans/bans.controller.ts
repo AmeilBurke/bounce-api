@@ -28,8 +28,8 @@ export class BansController {
 
   // Must be declared before ':id' or 'pending' would be treated as an id
   @Get('pending')
-  findPending(@Req() req: express.Request) {
-    return this.bansService.findPending(getBaseUrl(req));
+  findPending(@RequestFrom() staff: StaffPayload, @Req() req: express.Request) {
+    return this.bansService.findPending(staff.id, getBaseUrl(req));
   }
 
   @Get(':id')

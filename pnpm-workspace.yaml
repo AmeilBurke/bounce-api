@@ -2,4 +2,5 @@ allowBuilds:
   '@prisma/engines': true
   '@swc/core': true
   argon2: false
+  esbuild: false
   prisma: true
