@@ -125,7 +125,7 @@ async function main() {
       Object.entries(venueNames).map(async ([key, name]) => [
         key,
         await prisma.venue.create({
-          data: { name, imagePath: await createImage(ImageFolder.VENUES, name) },
+          data: { name },
         }),
       ]),
     ),
