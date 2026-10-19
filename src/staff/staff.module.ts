@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
-import { StaffService } from './staff.service.js';
-import { StaffController } from './staff.controller.js';
-import { PrismaService } from '../prisma.service.js';
-import { EventsModule } from '../events/events.module.js';
+import { StaffService } from './staff.service';
+import { StaffController } from './staff.controller';
+import { EventsModule } from '../events/events.module';
 
 @Module({
   controllers: [StaffController],
-  providers: [StaffService, PrismaService],
+  providers: [StaffService],
+  imports: [EventsModule],
   exports: [StaffService],
-  imports: [EventsModule]
 })
-export class StaffModule { }
+export class StaffModule {}

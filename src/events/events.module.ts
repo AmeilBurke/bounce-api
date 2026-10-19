@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
-import { EventsGateway } from './events.gateway';
-import { PrismaService } from '../prisma.service';
-import { JwtModule, JwtService } from '@nestjs/jwt';
+import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventsGateway } from './events.gateway';
 
 @Module({
   imports: [
@@ -14,7 +13,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       inject: [ConfigService],
     }),
   ],
-  providers: [EventsGateway, PrismaService],
-  exports: [EventsGateway]
+  providers: [EventsGateway],
+  exports: [EventsGateway],
 })
-export class EventsModule { }
+export class EventsModule {}

@@ -1,6 +1,6 @@
-import { IsArray, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { Venue } from '../../generated/prisma/client.js';
+import { IsArray, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Venue } from '../../generated/prisma/client';
 
 // multipart/form-data sends a single value as a string rather than an array
 const toArray = ({ value }: { value: unknown }) =>
@@ -8,7 +8,7 @@ const toArray = ({ value }: { value: unknown }) =>
 
 export class CreateVenueDto {
   @IsString()
-  name: Venue["name"];
+  name: Venue['name'];
 
   @IsOptional()
   @Transform(toArray)

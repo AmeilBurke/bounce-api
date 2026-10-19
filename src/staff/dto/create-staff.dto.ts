@@ -1,19 +1,18 @@
 import { IsArray, IsEmail, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
-import { Role } from '../../generated/prisma/enums.js';
-import { Staff } from '../../generated/prisma/client.js';
+import { Role, Staff } from '../../generated/prisma/client';
 
 export class CreateStaffDto {
   @IsEmail()
-  email: Staff["email"];
+  email: Staff['email'];
 
   @IsString()
-  password: Staff["password"];
+  password: Staff['password'];
 
   @IsString()
-  name: Staff["name"];
+  name: Staff['name'];
 
   @IsEnum(Role)
-  role: Staff["role"];
+  role: Staff['role'];
 
   @IsOptional()
   @IsArray()

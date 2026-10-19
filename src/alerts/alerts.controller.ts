@@ -1,49 +1,44 @@
-import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFile, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Req,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import express from 'express';
 import { AlertsService } from './alerts.service';
 import { CreateAlertDto } from './dto/create-alert.dto';
 import { RequestFrom } from '../auth/request-from.decorator';
 import type { StaffPayload } from '../auth/staff-payload.interface';
-import { FileInterceptor } from '@nestjs/platform-express';
-import multer from "multer";
-import { v4 as uuidv4 } from "uuid";
-import { getBaseUrl, imageFileValidator } from '../utils';
-import express from "express";
 import { Alert } from '../generated/prisma/client';
+import { getBaseUrl, ImageUpload } from '../utils';
 
 @Controller('alerts')
 export class AlertsController {
-  constructor(private readonly alertsService: AlertsService) { }
+  constructor(private readonly alertsService: AlertsService) {}
 
-  @UseInterceptors(
-    FileInterceptor("image", {
-      limits: {
-        files: 1,
-      },
-      storage: multer.diskStorage({
-        destination: "uploads/uncompressed",
-        filename: (req, file, callback) => {
-          callback(null, `${uuidv4()}`);
-        },
-      }),
-      fileFilter(req, file, callback) {
-        imageFileValidator(file, callback);
-      },
-    }),
-  )
+  @UseInterceptors(ImageUpload())
   @Post()
-  create(@Body() createAlertsDto: CreateAlertDto, @RequestFrom() staff: StaffPayload, @Req() req: express.Request, @UploadedFile() file: Express.Multer.File,) {
-    const baseUrl = getBaseUrl(req);
-    return this.alertsService.create(createAlertsDto, staff.id, file, baseUrl);
+  create(
+    @Body() createAlertDto: CreateAlertDto,
+    @RequestFrom() staff: StaffPayload,
+    @Req() req: express.Request,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.alertsService.create(createAlertDto, staff.id, file, getBaseUrl(req));
   }
 
   @Get()
   findAll(@Req() req: express.Request) {
-    const baseUrl = getBaseUrl(req);
-    return this.alertsService.findAll(baseUrl);
+    return this.alertsService.findAll(getBaseUrl(req));
   }
 
   @Delete(':id')
-  remove(@Param('id') id: Alert["id"], @RequestFrom() staff: StaffPayload) {
+  remove(@Param('id') id: Alert['id'], @RequestFrom() staff: StaffPayload) {
     return this.alertsService.remove(id, staff.id);
   }
 }

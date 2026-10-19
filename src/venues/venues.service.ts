@@ -9,61 +9,54 @@ import { UpdateVenueDto } from './dto/update-venue.dto';
 import { PrismaService } from '../prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { Prisma, Role, Staff, Venue } from '../generated/prisma/client';
-import { isAccountAdmin, toTitleCase } from '../utils';
-import path from 'path';
-import * as fs from 'fs';
-import sharp from 'sharp';
+import {
+  assertAdmin,
+  deleteImage,
+  deleteUpload,
+  ImageFolder,
+  imageUrl,
+  saveImage,
+  toTitleCase,
+  uniqueIds,
+} from '../utils';
 
 const venueInclude = {
   managers: { include: { staff: { select: { id: true, name: true } } } },
   dutyManagers: { include: { staff: { select: { id: true, name: true } } } },
 } satisfies Prisma.VenueInclude;
 
-// The global ValidationPipe doesn't transform, so the handler gets the raw body
-const toIdList = (value: string | string[] | undefined): string[] | undefined =>
-  value === undefined ? undefined : [...new Set(Array.isArray(value) ? value : [value])];
-
 @Injectable()
 export class VenuesService {
   constructor(
     private prisma: PrismaService,
     private events: EventsGateway,
-  ) { }
-
-  private readonly VENUE_IMAGE_FOLDER = path.join(process.cwd(), 'uploads', 'compressed', 'venues');
-  private readonly URL_VENUE_IMAGE = '/uploads/compressed/venues/';
-
-  async onModuleInit() {
-    await fs.promises.mkdir(this.VENUE_IMAGE_FOLDER, { recursive: true });
-  }
+  ) {}
 
   async create(
     createVenueDto: CreateVenueDto,
     staffId: Staff['id'],
-    file: Express.Multer.File,
+    file: Express.Multer.File | undefined,
     baseUrl: string,
   ) {
-    let createdFile: string | undefined;
+    let savedImage: string | undefined;
 
     try {
-      await this.assertAdmin(staffId);
+      await assertAdmin(this.prisma, staffId);
 
       if (!file) {
         throw new BadRequestException('No image was given');
       }
 
-      const managerIds = toIdList(createVenueDto.managers) ?? [];
-      const dutyManagerIds = toIdList(createVenueDto.dutyManagers) ?? [];
+      const managerIds = uniqueIds(createVenueDto.managers) ?? [];
+      const dutyManagerIds = uniqueIds(createVenueDto.dutyManagers) ?? [];
       await this.assertAssignable(managerIds, dutyManagerIds);
 
-      const webpFilename = `${file.filename}.webp`;
-      createdFile = path.join(this.VENUE_IMAGE_FOLDER, webpFilename);
-      await sharp(file.path).rotate().webp({ quality: 75 }).toFile(createdFile);
+      savedImage = await saveImage(file, ImageFolder.VENUES);
 
       const venue = await this.prisma.venue.create({
         data: {
           name: toTitleCase(createVenueDto.name),
-          imagePath: webpFilename,
+          imagePath: savedImage,
           managers: { create: managerIds.map((staffId) => ({ staffId })) },
           dutyManagers: { create: dutyManagerIds.map((staffId) => ({ staffId })) },
         },
@@ -74,15 +67,16 @@ export class VenuesService {
 
       return this.withImageUrl(venue, baseUrl);
     } catch (err) {
-      if (createdFile) await fs.promises.rm(createdFile, { force: true });
+      if (savedImage) await deleteImage(ImageFolder.VENUES, savedImage);
       throw err;
     } finally {
-      if (file) await fs.promises.unlink(file.path).catch(() => { });
+      await deleteUpload(file);
     }
   }
 
-  async findAll(baseUrl: string) {
+  async findAll(staffId: Staff['id'], baseUrl: string) {
     const venues = await this.prisma.venue.findMany({
+      where: await this.visibleTo(staffId),
       orderBy: { name: 'asc' },
       include: venueInclude,
     });
@@ -90,9 +84,16 @@ export class VenuesService {
     return venues.map((venue) => this.withImageUrl(venue, baseUrl));
   }
 
-  async findOne(id: Venue['id'], baseUrl: string) {
-    const venue = await this.prisma.venue.findUnique({
-      where: { id },
+  // Every venue's id regardless of who is asking, so "banned from every venue" can be worked out
+  async findAllIds(): Promise<string[]> {
+    const venues = await this.prisma.venue.findMany({ select: { id: true } });
+    return venues.map((venue) => venue.id);
+  }
+
+  async findOne(id: Venue['id'], staffId: Staff['id'], baseUrl: string) {
+    // A venue the requester can't see is reported as missing rather than forbidden
+    const venue = await this.prisma.venue.findFirst({
+      where: { id, ...(await this.visibleTo(staffId)) },
       include: venueInclude,
     });
 
@@ -110,10 +111,10 @@ export class VenuesService {
     file: Express.Multer.File | undefined,
     baseUrl: string,
   ) {
-    let createdFile: string | undefined;
+    let savedImage: string | undefined;
 
     try {
-      await this.assertAdmin(staffId);
+      await assertAdmin(this.prisma, staffId);
 
       const existing = await this.prisma.venue.findUnique({
         where: { id },
@@ -124,66 +125,63 @@ export class VenuesService {
       }
 
       // undefined = leave untouched, array = replace the full set
-      const managerIds = toIdList(updateVenueDto.managers);
-      const dutyManagerIds = toIdList(updateVenueDto.dutyManagers);
+      const managerIds = uniqueIds(updateVenueDto.managers);
+      const dutyManagerIds = uniqueIds(updateVenueDto.dutyManagers);
       await this.assertAssignable(managerIds ?? [], dutyManagerIds ?? []);
 
-      let imagePath: string | undefined;
       if (file) {
-        imagePath = `${file.filename}.webp`;
-        createdFile = path.join(this.VENUE_IMAGE_FOLDER, imagePath);
-        await sharp(file.path).rotate().webp({ quality: 75 }).toFile(createdFile);
+        savedImage = await saveImage(file, ImageFolder.VENUES);
       }
 
       const venue = await this.prisma.venue.update({
         where: { id },
         data: {
           name: updateVenueDto.name ? toTitleCase(updateVenueDto.name) : undefined,
-          imagePath,
+          imagePath: savedImage,
           managers:
             managerIds !== undefined
               ? {
-                deleteMany: {},
-                create: managerIds.map((staffId) => ({ staffId })),
-              }
+                  deleteMany: {},
+                  create: managerIds.map((staffId) => ({ staffId })),
+                }
               : undefined,
           dutyManagers:
             dutyManagerIds !== undefined
               ? {
-                deleteMany: {},
-                create: dutyManagerIds.map((staffId) => ({ staffId })),
-              }
+                  deleteMany: {},
+                  create: dutyManagerIds.map((staffId) => ({ staffId })),
+                }
               : undefined,
         },
         include: venueInclude,
       });
 
-      if (imagePath) {
-        await fs.promises.rm(path.join(this.VENUE_IMAGE_FOLDER, existing.imagePath), { force: true });
+      if (savedImage) {
+        await deleteImage(ImageFolder.VENUES, existing.imagePath);
       }
 
       this.events.notifyVenuesChanged();
 
       return this.withImageUrl(venue, baseUrl);
     } catch (err) {
-      if (createdFile) await fs.promises.rm(createdFile, { force: true });
+      if (savedImage) await deleteImage(ImageFolder.VENUES, savedImage);
 
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
         throw new NotFoundException('Venue not found');
       }
       throw err;
     } finally {
-      if (file) await fs.promises.unlink(file.path).catch(() => { });
+      await deleteUpload(file);
     }
   }
 
   async remove(id: Venue['id'], staffId: Staff['id']): Promise<string> {
-    await this.assertAdmin(staffId);
+    await assertAdmin(this.prisma, staffId);
 
     try {
       const deletedVenue = await this.prisma.venue.delete({ where: { id } });
 
-      await fs.promises.rm(path.join(this.VENUE_IMAGE_FOLDER, deletedVenue.imagePath), { force: true });
+      await deleteImage(ImageFolder.VENUES, deletedVenue.imagePath);
 
       this.events.notifyVenuesChanged();
 
@@ -196,10 +194,24 @@ export class VenuesService {
     }
   }
 
-  private async assertAdmin(staffId: Staff['id']) {
-    if (!(await isAccountAdmin(this.prisma, staffId))) {
+  // Venue and duty managers only see the venues they're assigned to; everyone else sees them all
+  private async visibleTo(staffId: Staff['id']): Promise<Prisma.VenueWhereInput> {
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: { role: true },
+    });
+
+    if (!staff) {
       throw new ForbiddenException();
     }
+
+    if (staff.role !== Role.VENUE_MANAGER && staff.role !== Role.DUTY_MANAGER) {
+      return {};
+    }
+
+    return {
+      OR: [{ managers: { some: { staffId } } }, { dutyManagers: { some: { staffId } } }],
+    };
   }
 
   // Also catches ids that don't belong to any staff member
@@ -221,12 +233,14 @@ export class VenuesService {
         },
       });
       if (count !== dutyManagerIds.length) {
-        throw new BadRequestException('Duty managers must be existing venue managers or duty managers');
+        throw new BadRequestException(
+          'Duty managers must be existing venue managers or duty managers',
+        );
       }
     }
   }
 
   private withImageUrl<T extends Venue>(venue: T, baseUrl: string): T {
-    return { ...venue, imagePath: `${baseUrl}${this.URL_VENUE_IMAGE}${venue.imagePath}` };
+    return { ...venue, imagePath: imageUrl(baseUrl, ImageFolder.VENUES, venue.imagePath) };
   }
 }
