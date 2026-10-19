@@ -1,9 +1,9 @@
 import {
-    WebSocketGateway,
-    WebSocketServer,
-    OnGatewayInit,
-    OnGatewayConnection,
-    OnGatewayDisconnect,
+  WebSocketGateway,
+  WebSocketServer,
+  OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
@@ -12,60 +12,72 @@ import { extractWsToken } from '../auth/extract-ws-token.util';
 import { Staff } from '../generated/prisma/client';
 
 export interface AlertCreatedPayload {
-    id: string;
-    title: string;
-    createdBy: string;
+  id: string;
+  title: string;
+  createdBy: string;
 }
 
 @WebSocketGateway({
-    cors: {
-        origin: '*', // tighten this for production
-    },
+  cors: {
+    origin: '*', // tighten this for production
+  },
 })
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
-    constructor(private jwtService: JwtService) { }
+  constructor(private jwtService: JwtService) {}
 
-    @WebSocketServer()
-    server: Server;
+  @WebSocketServer()
+  server: Server;
 
-    afterInit(server: Server) {
-        server.use(async (client, next) => {
-            try {
-                const token = extractWsToken(client);
-                if (!token) throw new Error('missing token');
+  afterInit(server: Server) {
+    server.use(async (client, next) => {
+      try {
+        const token = extractWsToken(client);
+        if (!token) throw new Error('missing token');
 
-                client.data.staff = await this.jwtService.verifyAsync<StaffPayload>(token);
-                next();
-            } catch {
-                next(new Error('unauthorized'));
-            }
-        });
-    }
+        client.data.staff = await this.jwtService.verifyAsync<StaffPayload>(token);
+        next();
+      } catch {
+        next(new Error('unauthorized'));
+      }
+    });
+  }
 
-    handleConnection(client: Socket) {
-        const staff: StaffPayload = client.data.staff;
-        client.join(`staff:${staff.id}`);
-        console.log(`${staff.name} has connected with ID: ${client.id}`);
-    }
+  handleConnection(client: Socket) {
+    const staff: StaffPayload = client.data.staff;
+    client.join(`staff:${staff.id}`);
+    console.log(`${staff.name} has connected with ID: ${client.id}`);
+  }
 
-    handleDisconnect(client: Socket) {
-        console.log(`Client disconnected: ${client.id}`);
-    }
+  handleDisconnect(client: Socket) {
+    console.log(`Client disconnected: ${client.id}`);
+  }
 
-    // notifyAlertCreated(staffId: Staff['id']) {
-    //     // this.server.except(`staff:${staffId}`).emit('alert_created');
-    //     this.server.emit('alert_created');
-    // }
+  // notifyAlertCreated(staffId: Staff['id']) {
+  //     // this.server.except(`staff:${staffId}`).emit('alert_created');
+  //     this.server.emit('alert_created');
+  // }
 
-    notifyAlertsChanged() {
-        this.server.emit('alert');
-    }
+  notifyAlertsChanged() {
+    this.server.emit('alert');
+  }
 
-    notifyStaffChanged() {
-        this.server.emit('staff');
-    }
+  notifyStaffChanged() {
+    this.server.emit('staff');
+  }
 
-    notifyStaffDeleted(staffToDelete: Staff["id"]) {
-        this.server.to(`staff:${staffToDelete}`).emit('delete');
-    }
+  notifyBansChanged() {
+    this.server.emit('ban');
+  }
+
+  notifyBannedPeopleChanged() {
+    this.server.emit('bannedPerson');
+  }
+
+  notifyVenuesChanged() {
+    this.server.emit('venue');
+  }
+
+  notifyStaffDeleted(staffToDelete: Staff['id']) {
+    this.server.to(`staff:${staffToDelete}`).emit('delete');
+  }
 }

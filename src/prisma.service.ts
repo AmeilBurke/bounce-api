@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from './generated/prisma/client.js';
+import { PrismaClient } from './generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
 @Injectable()
@@ -18,9 +18,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       await this.$queryRaw`SELECT 1`;
       this.logger.log('Database connected');
     } catch {
-      console.log(
-        'Docker database not running or unreachable (check the container is up)',
-      );
+      console.log('Docker database not running or unreachable (check the container is up)');
     }
   }
 }

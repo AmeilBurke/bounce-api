@@ -3,12 +3,17 @@ import { AppModule } from './app.module';
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { createImageFolders } from './utils';
 
 async function bootstrap() {
+  await createImageFolders();
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  // transform: true hands the services the validated DTO, including any @Transform changes
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  // Same uploads folder the image helpers in utils/images.ts write to
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
   });
   app.enableCors({

@@ -1,12 +1,12 @@
-import { IsNumber, IsOptional, IsString } from "class-validator";
-import { Alerts } from "../../generated/prisma/client";
+import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { Alert } from '../../generated/prisma/client';
 
-export class CreateAlertsDto {
+export class CreateAlertDto {
+  @IsString()
+  reason: Alert['reason'];
 
-    @IsString()
-    reason: Alerts["reason"];
-
-    @IsOptional()
-    @IsNumber()
-    personId?: Alerts["personId"];
+  // When given, the alert uses the banned person's image instead of an upload
+  @IsOptional()
+  @IsUUID()
+  bannedPersonId?: Alert['bannedPersonId'];
 }

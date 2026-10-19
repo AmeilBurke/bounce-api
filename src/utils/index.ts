@@ -1,6 +1,8 @@
-import { BadRequestException } from "@nestjs/common";
+import { ForbiddenException } from '@nestjs/common';
 import { Request } from 'express';
-import { PrismaClient, Roles, Staff } from "../generated/prisma/client";
+import { PrismaClient, Role, Staff } from '../generated/prisma/client';
+
+export * from './images';
 
 export function toTitleCase(input: string): string {
   return input
@@ -12,7 +14,7 @@ export function toTitleCase(input: string): string {
       word
         .split('-')
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join('-')
+        .join('-'),
     )
     .join(' ');
 }
@@ -22,33 +24,25 @@ export function capitalize(input: string): string {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 }
 
-export const getBaseUrl = (req: Request) => {
+export function getBaseUrl(req: Request): string {
   return `${req.protocol}://${req.get('host')}`;
-};
-
-export const imageFileValidator = (file: { fieldname?: string; originalname?: string; encoding?: string; mimetype: any; size?: number; destination?: string; filename?: string; path?: string; buffer?: Buffer<ArrayBufferLike>; }, callback: { (error: Error | null, acceptFile: boolean): void; (arg0: BadRequestException | null, arg1: boolean): void; }) => {
-  if (
-    file &&
-    (file.mimetype === 'image/png' ||
-      file.mimetype === 'image/webp' ||
-      file.mimetype === 'image/jpeg')
-  ) {
-    callback(null, true);
-  } else {
-    callback(
-      new BadRequestException('File given is not a png, webp or jpeg'),
-      false,
-    );
-  }
 }
 
-export async function isAccountAdmin(
-  prisma: PrismaClient,
-  staffId: Staff["id"]
-): Promise<boolean> {
+// Removes duplicate ids; undefined stays undefined so "not sent" can mean "leave untouched"
+export function uniqueIds(ids: string[] | undefined): string[] | undefined {
+  return ids === undefined ? undefined : [...new Set(ids)];
+}
+
+export async function isAccountAdmin(prisma: PrismaClient, staffId: Staff['id']): Promise<boolean> {
   const requestFrom = await prisma.staff.findUnique({
     where: { id: staffId },
   });
 
-  return requestFrom?.role === Roles.ADMIN;
+  return requestFrom?.role === Role.ADMIN;
+}
+
+export async function assertAdmin(prisma: PrismaClient, staffId: Staff['id']): Promise<void> {
+  if (!(await isAccountAdmin(prisma, staffId))) {
+    throw new ForbiddenException();
+  }
 }

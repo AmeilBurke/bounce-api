@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider     = "prisma-client"
   output       = "../src/generated/prisma"
@@ -13,32 +8,101 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Roles {
+enum Role {
   ADMIN
   BOUNCER
-  // VENUE_MANAGER
-  // DUTY_MANAGER
+  VENUE_MANAGER
+  DUTY_MANAGER
 }
 
 model Staff {
-  id       String  @id @default(uuid())
-  email    String  @unique
+  id       String @id @default(uuid())
+  email    String @unique
   password String
   name     String
-  role     Roles
-  alerts   Alerts[] @relation("AlertCreator")
-  // venueManagerAssignments VenueManager[]
-  // dutyManagerAssignments  DutyManager[]
-  // bansCreated             Ban[]          @relation("BanCreator")
+  role     Role
+
+  alerts        Alert[]
+  bans          Ban[]
+  venueManages VenueManager[]
+  dutyManages  DutyManager[]
 }
 
-model Alerts {
-  id          String   @id @default(uuid())
-  reason      String
-  imagePath   String
-  startDate   DateTime @default(now())
-  createdById String
-  personId    String?  @unique
-  createdBy   Staff    @relation("AlertCreator", fields: [createdById], references: [id])
-  // bannedPerson BannedPerson? @relation(fields: [personId], references: [id])
+model Alert {
+  id             String        @id @default(uuid())
+  reason         String
+  imagePath      String
+  startDate      DateTime      @default(now())
+  createdById    String
+  createdBy      Staff         @relation(fields: [createdById], references: [id])
+  bannedPersonId String?       @unique
+  bannedPerson   BannedPerson? @relation(fields: [bannedPersonId], references: [id], onDelete: SetNull)
+
+  @@index([createdById])
+}
+
+model VenueManager {
+  id      String @id @default(uuid())
+  staffId String
+  venueId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, venueId])
+  @@index([venueId])
+}
+
+model DutyManager {
+  id      String @id @default(uuid())
+  staffId String
+  venueId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, venueId])
+  @@index([venueId])
+}
+
+model Venue {
+  id           String         @id @default(uuid())
+  name         String
+  imagePath    String
+  managers     VenueManager[]
+  dutyManagers DutyManager[]
+  venueBans    VenueBan[]
+}
+
+model BannedPerson {
+  id        String @id @default(uuid())
+  name      String
+  imagePath String
+  alert     Alert?
+  bans      Ban[]
+}
+
+model Ban {
+  id             String       @id @default(uuid())
+  reason         String
+  startDate      DateTime
+  endDate        DateTime
+  isPending      Boolean
+  bannedPersonId String
+  bannedPerson   BannedPerson @relation(fields: [bannedPersonId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      Staff        @relation(fields: [createdById], references: [id])
+  venueBans      VenueBan[]
+
+  @@index([bannedPersonId])
+  @@index([createdById])
+}
+
+model VenueBan {
+  id      String @id @default(uuid())
+  venueId String
+  banId   String
+  venue   Venue  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  ban     Ban    @relation(fields: [banId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, banId])
+  @@index([banId])
 }

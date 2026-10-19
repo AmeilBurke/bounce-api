@@ -6,38 +6,42 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { CreateStaffDto } from './dto/create-staff.dto';
-import { PrismaService } from '../prisma.service';
-import { StaffEntity } from './staff.entity';
 import * as argon2 from 'argon2';
-import { Prisma, Roles, Staff } from '../generated/prisma/client';
-import type { StaffPayload } from '../auth/staff-payload.interface';
-import { isAccountAdmin, toTitleCase } from '../utils';
+import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { StaffEntity } from './staff.entity';
+import { PrismaService } from '../prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { Prisma, Role, Staff } from '../generated/prisma/client';
+import { assertAdmin, isAccountAdmin, toTitleCase, uniqueIds } from '../utils';
 
 @Injectable()
 export class StaffService {
-  constructor(private prisma: PrismaService, private events: EventsGateway) { }
+  constructor(
+    private prisma: PrismaService,
+    private events: EventsGateway,
+  ) {}
 
   async isInitialSetupComplete(): Promise<boolean> {
     return (await this.prisma.staff.count()) > 0;
   }
 
-  async create(createStaffDto: CreateStaffDto, staff?: StaffPayload): Promise<StaffEntity> {
-    const staffCount = await this.prisma.staff.count();
-    const isFirstAccount = staffCount === 0;
+  async create(createStaffDto: CreateStaffDto, staffId?: Staff['id']): Promise<StaffEntity> {
+    const isFirstAccount = !(await this.isInitialSetupComplete());
 
+    // Anyone can create the first account, which is always an admin
     if (!isFirstAccount) {
-      if (!staff) {
+      if (!staffId) {
         throw new UnauthorizedException();
       }
-
-      const isAdmin = await isAccountAdmin(this.prisma, staff.id);
-      if (!isAdmin) {
-        throw new ForbiddenException();
-      }
+      await assertAdmin(this.prisma, staffId);
     }
+
+    const role = isFirstAccount ? Role.ADMIN : createStaffDto.role;
+    const venueIds = uniqueIds(createStaffDto.venueManages) ?? [];
+    const dutyVenueIds = uniqueIds(createStaffDto.dutyManages) ?? [];
+
+    this.assertAssignable(role, venueIds, dutyVenueIds);
 
     try {
       const newStaff = await this.prisma.staff.create({
@@ -45,7 +49,9 @@ export class StaffService {
           email: createStaffDto.email.toLowerCase().trim(),
           password: await argon2.hash(createStaffDto.password),
           name: toTitleCase(createStaffDto.name),
-          role: isFirstAccount ? Roles.ADMIN : createStaffDto.role,
+          role,
+          venueManages: { create: venueIds.map((venueId) => ({ venueId })) },
+          dutyManages: { create: dutyVenueIds.map((venueId) => ({ venueId })) },
         },
       });
 
@@ -53,11 +59,13 @@ export class StaffService {
 
       return new StaffEntity(newStaff);
     } catch (err) {
-      console.log(err);
-
-      // need to figure out what to return when this happens
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Email already in use');
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2002') {
+          throw new ConflictException('Email already in use');
+        }
+        if (err.code === 'P2003') {
+          throw new BadRequestException('One or more venues do not exist');
+        }
       }
       throw err;
     }
@@ -66,27 +74,37 @@ export class StaffService {
   async findAll(): Promise<StaffEntity[]> {
     const allStaff = await this.prisma.staff.findMany({
       orderBy: [{ role: 'asc' }, { name: 'asc' }],
+      include: {
+        venueManages: true,
+        dutyManages: true,
+      },
     });
 
     return allStaff.map((staff) => new StaffEntity(staff));
   }
 
+  // Returns the password hash for signing in; wrap in StaffEntity before sending it anywhere
   async findOneByEmail(email: Staff['email']): Promise<Staff> {
-    const foundStaff = await this.prisma.staff.findUnique({
+    const staff = await this.prisma.staff.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
 
-    if (!foundStaff) {
-      throw new NotFoundException(`Staff with email ${email} not found`);
+    if (!staff) {
+      throw new NotFoundException('Staff not found');
     }
 
-    return foundStaff;
+    return staff;
   }
 
-  async update(id: Staff['id'], updateStaffDto: UpdateStaffDto, staff: StaffPayload) {
+  async update(
+    id: Staff['id'],
+    updateStaffDto: UpdateStaffDto,
+    staffId: Staff['id'],
+  ): Promise<StaffEntity> {
+    const isAdmin = await isAccountAdmin(this.prisma, staffId);
 
-    const isAdmin = await isAccountAdmin(this.prisma, staff.id);
-    if (!isAdmin && staff.id !== id) {
+    // Staff can update their own details, admins can update anyone's
+    if (!isAdmin && staffId !== id) {
       throw new ForbiddenException();
     }
 
@@ -94,75 +112,144 @@ export class StaffService {
       throw new ForbiddenException('Only admins can change roles');
     }
 
-    // Block demoting the last admin
-    if (updateStaffDto.role && updateStaffDto.role !== Roles.ADMIN) {
-      const target = await this.prisma.staff.findUnique({
-        where: { id },
-        select: { role: true },
-      });
-      if (!target) {
-        throw new NotFoundException('Staff not found');
-      }
+    if (
+      !isAdmin &&
+      (updateStaffDto.venueManages !== undefined || updateStaffDto.dutyManages !== undefined)
+    ) {
+      throw new ForbiddenException('Only admins can change venue assignments');
+    }
 
-      if (target.role === Roles.ADMIN) {
-        const adminCount = await this.prisma.staff.count({
-          where: { role: Roles.ADMIN },
-        });
-        if (adminCount <= 1) {
-          throw new BadRequestException('The last admin account cannot be demoted');
-        }
+    const target = await this.prisma.staff.findUnique({
+      where: { id },
+      select: { role: true },
+    });
+    if (!target) {
+      throw new NotFoundException('Staff not found');
+    }
+
+    if (updateStaffDto.role && updateStaffDto.role !== Role.ADMIN && target.role === Role.ADMIN) {
+      const adminCount = await this.prisma.staff.count({
+        where: { role: Role.ADMIN },
+      });
+      if (adminCount <= 1) {
+        throw new BadRequestException('The last admin account cannot be demoted');
       }
+    }
+
+    const newRole = updateStaffDto.role ?? target.role;
+    const roleChanged = newRole !== target.role;
+
+    // undefined = leave untouched, array = replace the full set
+    let venueIds = uniqueIds(updateStaffDto.venueManages);
+    let dutyVenueIds = uniqueIds(updateStaffDto.dutyManages);
+
+    this.assertAssignable(newRole, venueIds ?? [], dutyVenueIds ?? []);
+
+    // Role changed to one that no longer allows existing assignments: clear them
+    if (roleChanged && !this.canManageVenues(newRole)) {
+      venueIds = [];
+    }
+    if (roleChanged && !this.canDutyManage(newRole)) {
+      dutyVenueIds = [];
     }
 
     try {
       const updatedStaff = await this.prisma.staff.update({
-        where: {
-          id: id,
-        },
+        where: { id },
         data: {
           email: updateStaffDto.email ? updateStaffDto.email.toLowerCase().trim() : undefined,
           password: updateStaffDto.password
             ? await argon2.hash(updateStaffDto.password)
             : undefined,
           name: updateStaffDto.name ? toTitleCase(updateStaffDto.name) : undefined,
-          role: updateStaffDto.role ? updateStaffDto.role : undefined,
+          role: updateStaffDto.role,
+          venueManages:
+            venueIds !== undefined
+              ? {
+                  deleteMany: {},
+                  create: venueIds.map((venueId) => ({ venueId })),
+                }
+              : undefined,
+          dutyManages:
+            dutyVenueIds !== undefined
+              ? {
+                  deleteMany: {},
+                  create: dutyVenueIds.map((venueId) => ({ venueId })),
+                }
+              : undefined,
         },
       });
+
       this.events.notifyStaffChanged();
 
       return new StaffEntity(updatedStaff);
     } catch (err) {
-      console.log(err);
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2002') {
+          throw new ConflictException('Email already in use');
+        }
+        if (err.code === 'P2003') {
+          throw new BadRequestException('One or more venues do not exist');
+        }
+        if (err.code === 'P2025') {
+          throw new NotFoundException('Staff not found');
+        }
+      }
       throw err;
     }
   }
 
-  // need to remove account & link anything to them back to admin doing deleting
-  async remove(id: Staff['id'], staff: StaffPayload) {
-    const isAdmin = await isAccountAdmin(this.prisma, staff.id);
-    if (!isAdmin) {
-      throw new ForbiddenException();
+  async remove(id: Staff['id'], staffId: Staff['id']): Promise<string> {
+    await assertAdmin(this.prisma, staffId);
+
+    if (id === staffId) {
+      throw new BadRequestException('You cannot delete your own account');
     }
 
-    await this.prisma.alerts.updateMany({
-      where: {
-        createdById: id,
-      },
-      data: {
-        createdById: staff.id,
-      },
-    });
+    try {
+      const deletedStaff = await this.prisma.$transaction(async (tx) => {
+        // Alerts and bans need a creator, so hand them over to the admin deleting this account
+        await tx.alert.updateMany({
+          where: { createdById: id },
+          data: { createdById: staffId },
+        });
+        await tx.ban.updateMany({
+          where: { createdById: id },
+          data: { createdById: staffId },
+        });
 
-    const deletedAccount = await this.prisma.staff.delete({
-      where: {
-        id: id,
-      },
-    });
+        return tx.staff.delete({ where: { id } });
+      });
 
-    this.events.notifyStaffChanged();
+      this.events.notifyStaffChanged();
+      this.events.notifyStaffDeleted(deletedStaff.id);
 
-    this.events.notifyStaffDeleted(deletedAccount.id);
+      return `Deleted account of ${deletedStaff.name}`;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new NotFoundException('Staff not found');
+      }
+      throw err;
+    }
+  }
 
-    return `Deleted account of ${deletedAccount.name}`;
+  private canManageVenues(role: Role): boolean {
+    return role === Role.VENUE_MANAGER;
+  }
+
+  private canDutyManage(role: Role): boolean {
+    return role === Role.VENUE_MANAGER || role === Role.DUTY_MANAGER;
+  }
+
+  private assertAssignable(role: Role, venueIds: string[], dutyVenueIds: string[]) {
+    if (venueIds.length > 0 && !this.canManageVenues(role)) {
+      throw new BadRequestException('Only venue managers can be assigned venues to manage');
+    }
+
+    if (dutyVenueIds.length > 0 && !this.canDutyManage(role)) {
+      throw new BadRequestException(
+        'Only venue managers and duty managers can be assigned venues to duty manage',
+      );
+    }
   }
 }
