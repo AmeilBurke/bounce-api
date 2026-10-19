@@ -9,16 +9,7 @@ import { UpdateVenueDto } from './dto/update-venue.dto';
 import { PrismaService } from '../prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { Prisma, Role, Staff, Venue } from '../generated/prisma/client';
-import {
-  assertAdmin,
-  deleteImage,
-  deleteUpload,
-  ImageFolder,
-  imageUrl,
-  saveImage,
-  toTitleCase,
-  uniqueIds,
-} from '../utils';
+import { assertAdmin, toTitleCase, uniqueIds } from '../utils';
 
 const venueInclude = {
   managers: { include: { staff: { select: { id: true, name: true } } } },
@@ -32,56 +23,33 @@ export class VenuesService {
     private events: EventsGateway,
   ) {}
 
-  async create(
-    createVenueDto: CreateVenueDto,
-    staffId: Staff['id'],
-    file: Express.Multer.File | undefined,
-    baseUrl: string,
-  ) {
-    let savedImage: string | undefined;
+  async create(createVenueDto: CreateVenueDto, staffId: Staff['id']) {
+    await assertAdmin(this.prisma, staffId);
 
-    try {
-      await assertAdmin(this.prisma, staffId);
+    const managerIds = uniqueIds(createVenueDto.managers) ?? [];
+    const dutyManagerIds = uniqueIds(createVenueDto.dutyManagers) ?? [];
+    await this.assertAssignable(managerIds, dutyManagerIds);
 
-      if (!file) {
-        throw new BadRequestException('No image was given');
-      }
+    const venue = await this.prisma.venue.create({
+      data: {
+        name: toTitleCase(createVenueDto.name),
+        managers: { create: managerIds.map((staffId) => ({ staffId })) },
+        dutyManagers: { create: dutyManagerIds.map((staffId) => ({ staffId })) },
+      },
+      include: venueInclude,
+    });
 
-      const managerIds = uniqueIds(createVenueDto.managers) ?? [];
-      const dutyManagerIds = uniqueIds(createVenueDto.dutyManagers) ?? [];
-      await this.assertAssignable(managerIds, dutyManagerIds);
+    this.events.notifyVenuesChanged();
 
-      savedImage = await saveImage(file, ImageFolder.VENUES);
-
-      const venue = await this.prisma.venue.create({
-        data: {
-          name: toTitleCase(createVenueDto.name),
-          imagePath: savedImage,
-          managers: { create: managerIds.map((staffId) => ({ staffId })) },
-          dutyManagers: { create: dutyManagerIds.map((staffId) => ({ staffId })) },
-        },
-        include: venueInclude,
-      });
-
-      this.events.notifyVenuesChanged();
-
-      return this.withImageUrl(venue, baseUrl);
-    } catch (err) {
-      if (savedImage) await deleteImage(ImageFolder.VENUES, savedImage);
-      throw err;
-    } finally {
-      await deleteUpload(file);
-    }
+    return venue;
   }
 
-  async findAll(staffId: Staff['id'], baseUrl: string) {
-    const venues = await this.prisma.venue.findMany({
+  async findAll(staffId: Staff['id']) {
+    return this.prisma.venue.findMany({
       where: await this.visibleTo(staffId),
       orderBy: { name: 'asc' },
       include: venueInclude,
     });
-
-    return venues.map((venue) => this.withImageUrl(venue, baseUrl));
   }
 
   // Every venue's id regardless of who is asking, so "banned from every venue" can be worked out
@@ -90,7 +58,7 @@ export class VenuesService {
     return venues.map((venue) => venue.id);
   }
 
-  async findOne(id: Venue['id'], staffId: Staff['id'], baseUrl: string) {
+  async findOne(id: Venue['id'], staffId: Staff['id']) {
     // A venue the requester can't see is reported as missing rather than forbidden
     const venue = await this.prisma.venue.findFirst({
       where: { id, ...(await this.visibleTo(staffId)) },
@@ -101,43 +69,22 @@ export class VenuesService {
       throw new NotFoundException('Venue not found');
     }
 
-    return this.withImageUrl(venue, baseUrl);
+    return venue;
   }
 
-  async update(
-    id: Venue['id'],
-    updateVenueDto: UpdateVenueDto,
-    staffId: Staff['id'],
-    file: Express.Multer.File | undefined,
-    baseUrl: string,
-  ) {
-    let savedImage: string | undefined;
-
+  async update(id: Venue['id'], updateVenueDto: UpdateVenueDto, staffId: Staff['id']) {
     try {
       await assertAdmin(this.prisma, staffId);
-
-      const existing = await this.prisma.venue.findUnique({
-        where: { id },
-        select: { imagePath: true },
-      });
-      if (!existing) {
-        throw new NotFoundException('Venue not found');
-      }
 
       // undefined = leave untouched, array = replace the full set
       const managerIds = uniqueIds(updateVenueDto.managers);
       const dutyManagerIds = uniqueIds(updateVenueDto.dutyManagers);
       await this.assertAssignable(managerIds ?? [], dutyManagerIds ?? []);
 
-      if (file) {
-        savedImage = await saveImage(file, ImageFolder.VENUES);
-      }
-
       const venue = await this.prisma.venue.update({
         where: { id },
         data: {
           name: updateVenueDto.name ? toTitleCase(updateVenueDto.name) : undefined,
-          imagePath: savedImage,
           managers:
             managerIds !== undefined
               ? {
@@ -156,22 +103,14 @@ export class VenuesService {
         include: venueInclude,
       });
 
-      if (savedImage) {
-        await deleteImage(ImageFolder.VENUES, existing.imagePath);
-      }
-
       this.events.notifyVenuesChanged();
 
-      return this.withImageUrl(venue, baseUrl);
+      return venue;
     } catch (err) {
-      if (savedImage) await deleteImage(ImageFolder.VENUES, savedImage);
-
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
         throw new NotFoundException('Venue not found');
       }
       throw err;
-    } finally {
-      await deleteUpload(file);
     }
   }
 
@@ -180,8 +119,6 @@ export class VenuesService {
 
     try {
       const deletedVenue = await this.prisma.venue.delete({ where: { id } });
-
-      await deleteImage(ImageFolder.VENUES, deletedVenue.imagePath);
 
       this.events.notifyVenuesChanged();
 
@@ -238,9 +175,5 @@ export class VenuesService {
         );
       }
     }
-  }
-
-  private withImageUrl<T extends Venue>(venue: T, baseUrl: string): T {
-    return { ...venue, imagePath: imageUrl(baseUrl, ImageFolder.VENUES, venue.imagePath) };
   }
 }

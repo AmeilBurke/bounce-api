@@ -10,7 +10,6 @@ import sharp from 'sharp';
 export const ImageFolder = {
   ALERTS: 'alerts',
   PEOPLE: 'people',
-  VENUES: 'venues',
 } as const;
 export type ImageFolder = (typeof ImageFolder)[keyof typeof ImageFolder];
 
