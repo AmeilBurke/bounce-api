@@ -9,7 +9,7 @@ import { UpdateBanDto } from './dto/update-ban.dto';
 import { PrismaService } from '../prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { Ban, Prisma, Role, Staff } from '../generated/prisma/client';
-import { capitalize, ImageFolder, imageUrl, uniqueIds } from '../utils';
+import { assertAdmin, capitalize, ImageFolder, imageUrl, uniqueIds } from '../utils';
 
 const banInclude = {
   bannedPerson: true,
@@ -82,7 +82,10 @@ export class BansService {
     return bans.map((ban) => this.withImageUrl(ban, baseUrl));
   }
 
-  async findPending(baseUrl: string) {
+  // Only admins review pending bans
+  async findPending(staffId: Staff['id'], baseUrl: string) {
+    await assertAdmin(this.prisma, staffId);
+
     const bans = await this.prisma.ban.findMany({
       where: { isPending: true },
       orderBy: { startDate: 'desc' },
