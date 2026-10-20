@@ -23,6 +23,14 @@ const PALETTE = ['#e11d48', '#7c3aed', '#2563eb', '#0891b2', '#059669', '#ca8a04
 const DAY = 24 * 60 * 60 * 1000;
 const daysFromNow = (days: number) => new Date(Date.now() + days * DAY);
 
+// Fixed-seed random numbers so every reseed produces the same data
+let randomState = 42;
+const random = () => {
+  randomState = (randomState * 1103515245 + 12345) % 2 ** 31;
+  return randomState / 2 ** 31;
+};
+const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)];
+
 const slugify = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
 const initials = (name: string) =>
@@ -118,6 +126,8 @@ async function main() {
     neon: 'Neon Room',
     docks: 'The Docks',
     skyline: 'Skyline Rooftop',
+    // No managers or duty managers assigned
+    harbour: 'Harbour Bar',
   };
 
   const venues = Object.fromEntries(
@@ -172,7 +182,7 @@ async function main() {
       name: 'Emerson Clark',
       bans: [
         { reason: 'Repeated fighting', start: -10, end: 80, venueIds: [venues.velvet.id, venues.docks.id], by: 'morgan' },
-        { reason: 'Repeated fighting', start: -8, end: 82, venueIds: [venues.neon.id, venues.skyline.id], by: 'sam' },
+        { reason: 'Repeated fighting', start: -8, end: 82, venueIds: [venues.neon.id, venues.skyline.id, venues.harbour.id], by: 'admin' },
       ],
     },
     {
@@ -214,7 +224,57 @@ async function main() {
         { reason: 'Stole from the bar again', start: 0, end: 90, venueIds: [venues.neon.id], by: 'taylor', pending: true },
       ],
     },
+    {
+      // Banned from every venue but one, so not a blanket ban
+      name: 'Morgan Ellis',
+      bans: [
+        {
+          reason: 'Kept sneaking drinks in',
+          start: -4,
+          end: 60,
+          venueIds: allVenueIds.filter((id) => id !== venues.harbour.id),
+          by: 'admin',
+        },
+      ],
+    },
+    {
+      // Was banned from every venue, but it has run out
+      name: 'Jesse Long',
+      bans: [{ reason: 'Vandalised the toilets', start: -400, end: -10, venueIds: allVenueIds, by: 'admin' }],
+    },
+    ...generatedPeople(),
   ];
+
+  // Enough extra people to fill several screens, for scrolling, searching and image loading
+  function generatedPeople(): { name: string; bans: SeedBan[] }[] {
+    const firstNames = ['Alex', 'Bailey', 'Cameron', 'Dakota', 'Elliot', 'Finley', 'Harper', 'Jordan', 'Kai', 'Logan', 'Micah', 'Noah', 'Peyton', 'Riley', 'Sage', 'Toby'];
+    const lastNames = ['Adams', 'Brooks', 'Carter', 'Dixon', 'Evans', 'Foster', 'Grant', 'Hughes', 'Irwin', 'James', 'Knight', 'Lowe', 'Mason', 'Nash', 'Owens', 'Pierce'];
+    const reasons = ['Fighting', 'Abusive to staff', 'Fake id', 'Drunk and disorderly', 'Theft', 'Refused to leave', 'Damaged property', 'Harassing customers'];
+    const bannedBy = ['admin', 'morgan', 'sam'] as const;
+    // [start, end] in days from now: active, expired and future bans
+    const periods = [[-30, 60], [-10, 20], [-200, -50], [-5, 365], [3, 90]] as const;
+
+    const names = new Set<string>();
+    while (names.size < 30) names.add(`${pick(firstNames)} ${pick(lastNames)}`);
+
+    return [...names].map((name) => {
+      const [start, end] = pick(periods);
+      const venueIds = allVenueIds.filter(() => random() < 0.4);
+      return {
+        name,
+        bans: [
+          {
+            reason: pick(reasons),
+            start,
+            end,
+            venueIds: venueIds.length > 0 ? venueIds : [venues.velvet.id],
+            by: pick(bannedBy),
+            pending: random() < 0.15,
+          },
+        ],
+      };
+    });
+  }
 
   const bannedPeople: Record<string, { id: string; imagePath: string }> = {};
 
@@ -243,6 +303,9 @@ async function main() {
   for (const [reason, by] of [
     ['Group of four in matching red jackets causing trouble on the strip', staff.jamie.id],
     ['Man in a grey hoodie trying fake ids at several venues', staff.riley.id],
+    ['Two men in suits asking staff about the cash office', staff.taylor.id],
+    ['Woman with a pink backpack reported for pickpocketing', staff.jordan.id],
+    ['Silver hatchback idling outside the back entrance', staff.casey.id],
   ] as const) {
     await prisma.alert.create({
       data: {
@@ -264,7 +327,10 @@ async function main() {
     },
   });
 
-  console.log(`Seeded ${Object.keys(staff).length} staff, ${allVenueIds.length} venues, ${people.length} banned people and 3 alerts`);
+  const alertCount = await prisma.alert.count();
+  console.log(
+    `Seeded ${Object.keys(staff).length} staff, ${allVenueIds.length} venues, ${people.length} banned people and ${alertCount} alerts`,
+  );
   console.log(
     existingAdmin
       ? `Kept existing admin; seeded accounts sign in with password "${PASSWORD}"`

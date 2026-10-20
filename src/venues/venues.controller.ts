@@ -20,12 +20,6 @@ export class VenuesController {
     return this.venuesService.findAll(staff.id);
   }
 
-  // Must be declared before ':id' or 'ids' would be treated as an id
-  @Get('ids')
-  findAllIds() {
-    return this.venuesService.findAllIds();
-  }
-
   @Get(':id')
   findOne(@Param('id') id: Venue['id'], @RequestFrom() staff: StaffPayload) {
     return this.venuesService.findOne(id, staff.id);

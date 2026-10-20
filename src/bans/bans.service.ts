@@ -243,10 +243,9 @@ export class BansService {
     return ban.venueBans.map((venueBan) => venueBan.venueId);
   }
 
+  // The webapp also refreshes banned people on this, since they're returned with their bans
   private notifyChanged() {
     this.events.notifyBansChanged();
-    // Banned people are returned with their bans
-    this.events.notifyBannedPeopleChanged();
   }
 
   private withImageUrl(ban: BanWithRelations, baseUrl: string): BanWithRelations {

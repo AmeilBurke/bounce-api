@@ -36,6 +36,7 @@ export function uniqueIds(ids: string[] | undefined): string[] | undefined {
 export async function isAccountAdmin(prisma: PrismaClient, staffId: Staff['id']): Promise<boolean> {
   const requestFrom = await prisma.staff.findUnique({
     where: { id: staffId },
+    select: { role: true },
   });
 
   return requestFrom?.role === Role.ADMIN;
