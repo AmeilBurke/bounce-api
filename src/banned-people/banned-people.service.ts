@@ -4,7 +4,7 @@ import { CreateBannedPersonDto } from './dto/create-banned-person.dto';
 import { UpdateBannedPersonDto } from './dto/update-banned-person.dto';
 import { PrismaService } from '../prisma.service';
 import { EventsGateway } from '../events/events.gateway';
-import { BannedPerson, Prisma, Staff } from '../generated/prisma/client';
+import { BannedPerson, Prisma, Staff, Venue } from '../generated/prisma/client';
 import {
   assertAdmin,
   deleteImage,
@@ -16,16 +16,31 @@ import {
   toTitleCase,
 } from '../utils';
 
+const banInclude = {
+  createdBy: { select: { id: true, name: true } },
+  venueBans: { include: { venue: { select: { id: true, name: true } } } },
+} satisfies Prisma.BanInclude;
+
+// Pending bans are only shown on their own, in the pending bans list
 const bannedPersonInclude = {
   alert: true,
   bans: {
+    where: { isPending: false },
     orderBy: { startDate: 'desc' },
-    include: {
-      createdBy: { select: { id: true, name: true } },
-      venueBans: { include: { venue: { select: { id: true, name: true } } } },
-    },
+    include: banInclude,
   },
 } satisfies Prisma.BannedPersonInclude;
+
+type BannedPersonWithBans = Prisma.BannedPersonGetPayload<{
+  include: typeof bannedPersonInclude;
+}>;
+
+const activeBanWhere = (now: Date) =>
+  ({
+    isPending: false,
+    startDate: { lte: now },
+    endDate: { gt: now },
+  }) satisfies Prisma.BanWhereInput;
 
 @Injectable()
 export class BannedPeopleService {
@@ -74,6 +89,52 @@ export class BannedPeopleService {
     });
 
     return people.map((person) => this.withImageUrl(person, baseUrl));
+  }
+
+  // People with an approved ban at the venue, carrying only their bans at that venue
+  async findAtVenue(venueId: Venue['id'], baseUrl: string) {
+    const atVenue = {
+      isPending: false,
+      venueBans: { some: { venueId } },
+    } satisfies Prisma.BanWhereInput;
+
+    const people = await this.prisma.bannedPerson.findMany({
+      where: { bans: { some: atVenue } },
+      orderBy: { name: 'asc' },
+      include: {
+        ...bannedPersonInclude,
+        bans: { ...bannedPersonInclude.bans, where: atVenue },
+      },
+    });
+
+    return people.map((person) => this.withImageUrl(person, baseUrl));
+  }
+
+  // People whose active bans, taken together, cover every venue
+  async findBlanketBanned(baseUrl: string) {
+    const venues = await this.prisma.venue.findMany({ select: { id: true } });
+    if (venues.length === 0) return [];
+
+    const now = new Date();
+
+    // Narrowed in the database to anyone with an active ban, then checked for full coverage here
+    const candidates = await this.prisma.bannedPerson.findMany({
+      where: { bans: { some: activeBanWhere(now) } },
+      orderBy: { name: 'asc' },
+      include: bannedPersonInclude,
+    });
+
+    return candidates
+      .filter((person) => this.coversEveryVenue(person, venues, now))
+      .map((person) => this.withImageUrl(person, baseUrl));
+  }
+
+  // Just enough to pick a person from a list
+  async findNames() {
+    return this.prisma.bannedPerson.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
   }
 
   async findOne(id: BannedPerson['id'], baseUrl: string) {
@@ -181,6 +242,15 @@ export class BannedPeopleService {
       }
       throw err;
     }
+  }
+
+  private coversEveryVenue(person: BannedPersonWithBans, venues: { id: Venue['id'] }[], now: Date) {
+    const covered = new Set(
+      person.bans
+        .filter((ban) => ban.startDate <= now && now < ban.endDate)
+        .flatMap((ban) => ban.venueBans.map((venueBan) => venueBan.venueId)),
+    );
+    return venues.every((venue) => covered.has(venue.id));
   }
 
   private withImageUrl<T extends BannedPerson>(person: T, baseUrl: string): T {

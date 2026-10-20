@@ -5,6 +5,7 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import type { StaffPayload } from '../auth/staff-payload.interface';
@@ -24,6 +25,8 @@ export interface AlertCreatedPayload {
 })
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   constructor(private jwtService: JwtService) {}
+
+  private readonly logger = new Logger(EventsGateway.name);
 
   @WebSocketServer()
   server: Server;
@@ -45,11 +48,11 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
   handleConnection(client: Socket) {
     const staff: StaffPayload = client.data.staff;
     client.join(`staff:${staff.id}`);
-    console.log(`${staff.name} has connected with ID: ${client.id}`);
+    this.logger.debug(`${staff.name} has connected with ID: ${client.id}`);
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
+    this.logger.debug(`Client disconnected: ${client.id}`);
   }
 
   // notifyAlertCreated(staffId: Staff['id']) {

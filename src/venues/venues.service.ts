@@ -52,12 +52,6 @@ export class VenuesService {
     });
   }
 
-  // Every venue's id regardless of who is asking, so "banned from every venue" can be worked out
-  async findAllIds(): Promise<string[]> {
-    const venues = await this.prisma.venue.findMany({ select: { id: true } });
-    return venues.map((venue) => venue.id);
-  }
-
   async findOne(id: Venue['id'], staffId: Staff['id']) {
     // A venue the requester can't see is reported as missing rather than forbidden
     const venue = await this.prisma.venue.findFirst({

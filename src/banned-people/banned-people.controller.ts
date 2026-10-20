@@ -16,7 +16,7 @@ import { CreateBannedPersonDto } from './dto/create-banned-person.dto';
 import { UpdateBannedPersonDto } from './dto/update-banned-person.dto';
 import { RequestFrom } from '../auth/request-from.decorator';
 import type { StaffPayload } from '../auth/staff-payload.interface';
-import { BannedPerson } from '../generated/prisma/client';
+import { BannedPerson, Venue } from '../generated/prisma/client';
 import { getBaseUrl, ImageUpload } from '../utils';
 
 @Controller('banned-people')
@@ -36,6 +36,22 @@ export class BannedPeopleController {
   @Get()
   findAll(@Req() req: express.Request) {
     return this.bannedPeopleService.findAll(getBaseUrl(req));
+  }
+
+  // These must be declared before ':id' or their paths would be treated as an id
+  @Get('venue/:venueId')
+  findAtVenue(@Param('venueId') venueId: Venue['id'], @Req() req: express.Request) {
+    return this.bannedPeopleService.findAtVenue(venueId, getBaseUrl(req));
+  }
+
+  @Get('blanket')
+  findBlanketBanned(@Req() req: express.Request) {
+    return this.bannedPeopleService.findBlanketBanned(getBaseUrl(req));
+  }
+
+  @Get('names')
+  findNames() {
+    return this.bannedPeopleService.findNames();
   }
 
   @Get(':id')

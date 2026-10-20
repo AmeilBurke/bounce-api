@@ -15,6 +15,8 @@ export type ImageFolder = (typeof ImageFolder)[keyof typeof ImageFolder];
 
 const COMPRESSED_FOLDER = path.join(process.cwd(), 'uploads', 'compressed');
 const ALLOWED_MIME_TYPES = ['image/png', 'image/webp', 'image/jpeg'];
+// Images only ever show as cards, so anything bigger is wasted download
+export const MAX_IMAGE_SIZE = 800;
 
 // check over all controllers & functions to make sure its still readable
 
@@ -54,7 +56,16 @@ export function imageUrl(baseUrl: string, folder: ImageFolder, filename: string)
 // Converts an uploaded image to webp in the given folder and returns the new filename
 export async function saveImage(file: Express.Multer.File, folder: ImageFolder): Promise<string> {
   const filename = `${file.filename}.webp`;
-  await sharp(file.path).rotate().webp({ quality: 75 }).toFile(imagePath(folder, filename));
+  await sharp(file.path)
+    .rotate()
+    .resize({
+      width: MAX_IMAGE_SIZE,
+      height: MAX_IMAGE_SIZE,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 75 })
+    .toFile(imagePath(folder, filename));
   return filename;
 }
 
