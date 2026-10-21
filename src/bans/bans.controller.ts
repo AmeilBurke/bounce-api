@@ -1,12 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
-import express from 'express';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { BansService } from './bans.service';
 import { CreateBanDto } from './dto/create-ban.dto';
 import { UpdateBanDto } from './dto/update-ban.dto';
 import { RequestFrom } from '../auth/request-from.decorator';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { Ban } from '../generated/prisma/client';
-import { getBaseUrl } from '../utils';
 
 @Controller('bans')
 export class BansController {
@@ -16,34 +14,32 @@ export class BansController {
   create(
     @Body() createBanDto: CreateBanDto,
     @RequestFrom() staff: StaffPayload,
-    @Req() req: express.Request,
   ) {
-    return this.bansService.create(createBanDto, staff.id, getBaseUrl(req));
+    return this.bansService.create(createBanDto, staff.id);
   }
 
   @Get()
-  findAll(@Req() req: express.Request) {
-    return this.bansService.findAll(getBaseUrl(req));
+  findAll() {
+    return this.bansService.findAll();
   }
 
   // Must be declared before ':id' or 'pending' would be treated as an id
   @Get('pending')
-  findPending(@RequestFrom() staff: StaffPayload, @Req() req: express.Request) {
-    return this.bansService.findPending(staff.id, getBaseUrl(req));
+  findPending(@RequestFrom() staff: StaffPayload) {
+    return this.bansService.findPending(staff.id);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: Ban['id'], @Req() req: express.Request) {
-    return this.bansService.findOne(id, getBaseUrl(req));
+  findOne(@Param('id') id: Ban['id']) {
+    return this.bansService.findOne(id);
   }
 
   @Patch(':id/approve')
   approve(
     @Param('id') id: Ban['id'],
     @RequestFrom() staff: StaffPayload,
-    @Req() req: express.Request,
   ) {
-    return this.bansService.approve(id, staff.id, getBaseUrl(req));
+    return this.bansService.approve(id, staff.id);
   }
 
   @Patch(':id')
@@ -51,9 +47,8 @@ export class BansController {
     @Param('id') id: Ban['id'],
     @Body() updateBanDto: UpdateBanDto,
     @RequestFrom() staff: StaffPayload,
-    @Req() req: express.Request,
   ) {
-    return this.bansService.update(id, updateBanDto, staff.id, getBaseUrl(req));
+    return this.bansService.update(id, updateBanDto, staff.id);
   }
 
   @Delete(':id')

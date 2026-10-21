@@ -5,17 +5,15 @@ import {
   Get,
   Param,
   Post,
-  Req,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import express from 'express';
 import { AlertsService } from './alerts.service';
 import { CreateAlertDto } from './dto/create-alert.dto';
 import { RequestFrom } from '../auth/request-from.decorator';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { Alert } from '../generated/prisma/client';
-import { getBaseUrl, ImageUpload } from '../utils';
+import { ImageUpload } from '../utils';
 
 @Controller('alerts')
 export class AlertsController {
@@ -26,15 +24,14 @@ export class AlertsController {
   create(
     @Body() createAlertDto: CreateAlertDto,
     @RequestFrom() staff: StaffPayload,
-    @Req() req: express.Request,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.alertsService.create(createAlertDto, staff.id, file, getBaseUrl(req));
+    return this.alertsService.create(createAlertDto, staff.id, file);
   }
 
   @Get()
-  findAll(@Req() req: express.Request) {
-    return this.alertsService.findAll(getBaseUrl(req));
+  findAll() {
+    return this.alertsService.findAll();
   }
 
   @Delete(':id')

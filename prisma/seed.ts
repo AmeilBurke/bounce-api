@@ -1,12 +1,18 @@
 // Fills the database with sample data for local development.
 // Run with `pnpm db:seed`. WARNING: this deletes every existing row first.
 import 'dotenv/config';
-import * as fs from 'fs';
 import * as argon2 from 'argon2';
 import sharp from 'sharp';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Role } from '../src/generated/prisma/client';
-import { createImageFolders, ImageFolder, imagePath, MAX_IMAGE_SIZE } from '../src/utils/images';
+import {
+  deleteImages,
+  ensureImageBucket,
+  ImageFolder,
+  listImages,
+  MAX_IMAGE_SIZE,
+  uploadImage,
+} from '../src/utils/images';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -54,7 +60,7 @@ async function createImage(folder: ImageFolder, name: string): Promise<string> {
         font-size="200" font-weight="bold" fill="#ffffff">${initials(name)}</text>
     </svg>`;
 
-  await sharp(Buffer.from(svg)).webp({ quality: 75 }).toFile(imagePath(folder, filename));
+  await uploadImage(folder, filename, await sharp(Buffer.from(svg)).webp({ quality: 75 }).toBuffer());
   return filename;
 }
 
@@ -69,9 +75,8 @@ async function createPortrait(name: string): Promise<string> {
   try {
     const res = await fetch(`https://i.pravatar.cc/${MAX_IMAGE_SIZE}?img=${img}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    await sharp(Buffer.from(await res.arrayBuffer()))
-      .webp({ quality: 75 })
-      .toFile(imagePath(ImageFolder.PEOPLE, filename));
+    const photo = await sharp(Buffer.from(await res.arrayBuffer())).webp({ quality: 75 }).toBuffer();
+    await uploadImage(ImageFolder.PEOPLE, filename, photo);
     return filename;
   } catch (err) {
     console.warn(`Couldn't download a photo for ${name}, using initials: ${(err as Error).message}`);
@@ -82,12 +87,10 @@ async function createPortrait(name: string): Promise<string> {
 async function removeSeedImages() {
   await Promise.all(
     Object.values(ImageFolder).map(async (folder) => {
-      const dir = imagePath(folder, '');
-      const files = await fs.promises.readdir(dir);
-      await Promise.all(
-        files
-          .filter((file) => file.startsWith(SEED_IMAGE_PREFIX))
-          .map((file) => fs.promises.rm(imagePath(folder, file), { force: true })),
+      const files = await listImages(folder);
+      await deleteImages(
+        folder,
+        files.filter((file) => file.startsWith(SEED_IMAGE_PREFIX)),
       );
     }),
   );
@@ -107,7 +110,7 @@ async function clearDatabase() {
 }
 
 async function main() {
-  await createImageFolders();
+  await ensureImageBucket();
   await removeSeedImages();
   await clearDatabase();
 
