@@ -14,7 +14,6 @@ import {
   assertAdmin,
   capitalize,
   deleteImage,
-  deleteUpload,
   ImageFolder,
   imageUrl,
   saveImage,
@@ -33,7 +32,6 @@ export class AlertsService {
     createAlertDto: CreateAlertDto,
     staffId: Staff['id'],
     file: Express.Multer.File | undefined,
-    baseUrl: string,
   ): Promise<Alert> {
     const bannedPersonId = createAlertDto.bannedPersonId || undefined;
     let savedImage: string | undefined;
@@ -72,7 +70,7 @@ export class AlertsService {
 
       this.events.notifyAlertsChanged();
 
-      return this.withImageUrl(alert, baseUrl);
+      return this.withImageUrl(alert);
     } catch (err) {
       if (savedImage) await deleteImage(ImageFolder.ALERTS, savedImage);
 
@@ -80,17 +78,15 @@ export class AlertsService {
         throw new ConflictException('An alert already exists for this person');
       }
       throw err;
-    } finally {
-      await deleteUpload(file);
     }
   }
 
-  async findAll(baseUrl: string): Promise<Alert[]> {
+  async findAll(): Promise<Alert[]> {
     const alerts = await this.prisma.alert.findMany({
       orderBy: { startDate: 'desc' },
     });
 
-    return alerts.map((alert) => this.withImageUrl(alert, baseUrl));
+    return alerts.map((alert) => this.withImageUrl(alert));
   }
 
   async remove(id: Alert['id'], staffId: Staff['id']): Promise<string> {
@@ -148,8 +144,8 @@ export class AlertsService {
     }
   }
 
-  private withImageUrl(alert: Alert, baseUrl: string): Alert {
+  private withImageUrl(alert: Alert): Alert {
     const folder = alert.bannedPersonId ? ImageFolder.PEOPLE : ImageFolder.ALERTS;
-    return { ...alert, imagePath: imageUrl(baseUrl, folder, alert.imagePath) };
+    return { ...alert, imagePath: imageUrl(folder, alert.imagePath) };
   }
 }

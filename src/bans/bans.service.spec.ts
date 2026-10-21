@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { Prisma, Role } from '../generated/prisma/client';
 
-const BASE_URL = 'http://api.test';
+process.env.SUPABASE_URL = 'https://project.supabase.co';
 const DAY = 24 * 60 * 60 * 1000;
 const inDays = (days: number) => new Date(Date.now() + days * DAY).toISOString();
 
@@ -87,20 +87,20 @@ describe('BansService', () => {
   describe('create', () => {
     it('approves bans from admins straight away', async () => {
       actAs(Role.ADMIN);
-      const ban = await service.create(newBan([NEON]), 'staff-1', BASE_URL);
+      const ban = await service.create(newBan([NEON]), 'staff-1');
       expect(ban.isPending).toBe(false);
       expect(events.notifyBansChanged).toHaveBeenCalled();
     });
 
     it('approves bans from venue managers at their own venues', async () => {
       actAs(Role.VENUE_MANAGER, [VELVET, DOCKS]);
-      const ban = await service.create(newBan([VELVET, DOCKS]), 'staff-1', BASE_URL);
+      const ban = await service.create(newBan([VELVET, DOCKS]), 'staff-1');
       expect(ban.isPending).toBe(false);
     });
 
     it('stops venue managers banning from venues they do not manage', async () => {
       actAs(Role.VENUE_MANAGER, [VELVET]);
-      await expect(service.create(newBan([VELVET, NEON]), 'staff-1', BASE_URL)).rejects.toThrow(
+      await expect(service.create(newBan([VELVET, NEON]), 'staff-1')).rejects.toThrow(
         ForbiddenException,
       );
       expect(prisma.ban.create).not.toHaveBeenCalled();
@@ -108,24 +108,26 @@ describe('BansService', () => {
 
     it.each([Role.DUTY_MANAGER, Role.BOUNCER])('leaves bans from a %s pending', async (role) => {
       actAs(role);
-      const ban = await service.create(newBan([NEON]), 'staff-1', BASE_URL);
+      const ban = await service.create(newBan([NEON]), 'staff-1');
       expect(ban.isPending).toBe(true);
     });
 
     it('rejects an end date before the start date', async () => {
       actAs(Role.ADMIN);
       await expect(
-        service.create(newBan([VELVET], { start: 10, end: 5 }), 'staff-1', BASE_URL),
+        service.create(newBan([VELVET], { start: 10, end: 5 }), 'staff-1'),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('capitalises the reason and turns the image into a full url', async () => {
+    it('capitalises the reason and turns the image into a storage url', async () => {
       actAs(Role.ADMIN);
-      await service.create(newBan([VELVET]), 'staff-1', BASE_URL);
+      await service.create(newBan([VELVET]), 'staff-1');
       expect(prisma.ban.create.mock.calls[0][0].data.reason).toBe('Fighting');
 
-      const ban = await service.create(newBan([VELVET]), 'staff-1', BASE_URL);
-      expect(ban.bannedPerson.imagePath).toBe(`${BASE_URL}/uploads/compressed/people/blake.webp`);
+      const ban = await service.create(newBan([VELVET]), 'staff-1');
+      expect(ban.bannedPerson.imagePath).toBe(
+        'https://project.supabase.co/storage/v1/object/public/images/people/blake.webp',
+      );
     });
 
     it('reports a missing person or venue as a bad request', async () => {
@@ -133,14 +135,14 @@ describe('BansService', () => {
       prisma.ban.create.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'test' }),
       );
-      await expect(service.create(newBan([VELVET]), 'staff-1', BASE_URL)).rejects.toThrow(
+      await expect(service.create(newBan([VELVET]), 'staff-1')).rejects.toThrow(
         BadRequestException,
       );
     });
 
     it('refuses staff whose account no longer exists', async () => {
       prisma.staff.findUnique.mockResolvedValue(null);
-      await expect(service.create(newBan([VELVET]), 'staff-1', BASE_URL)).rejects.toThrow(
+      await expect(service.create(newBan([VELVET]), 'staff-1')).rejects.toThrow(
         ForbiddenException,
       );
     });
@@ -149,13 +151,13 @@ describe('BansService', () => {
   describe('findPending', () => {
     it('is only for admins', async () => {
       actAs(Role.VENUE_MANAGER, [VELVET]);
-      await expect(service.findPending('staff-1', BASE_URL)).rejects.toThrow(ForbiddenException);
+      await expect(service.findPending('staff-1')).rejects.toThrow(ForbiddenException);
     });
 
     it('lists pending bans for admins', async () => {
       actAs(Role.ADMIN);
       prisma.ban.findMany.mockResolvedValue([makeBan({ isPending: true })]);
-      const bans = await service.findPending('staff-1', BASE_URL);
+      const bans = await service.findPending('staff-1');
       expect(bans).toHaveLength(1);
       expect(prisma.ban.findMany.mock.calls[0][0].where).toEqual({ isPending: true });
     });
@@ -165,31 +167,31 @@ describe('BansService', () => {
     it('lets a venue manager approve a pending ban at their venue', async () => {
       actAs(Role.VENUE_MANAGER, [VELVET]);
       prisma.ban.findUnique.mockResolvedValue(makeBan({ isPending: true, venueIds: [VELVET] }));
-      await service.approve('ban-1', 'staff-1', BASE_URL);
+      await service.approve('ban-1', 'staff-1');
       expect(prisma.ban.update.mock.calls[0][0].data).toEqual({ isPending: false });
     });
 
     it('stops a venue manager approving a ban that covers another venue', async () => {
       actAs(Role.VENUE_MANAGER, [VELVET]);
       prisma.ban.findUnique.mockResolvedValue(makeBan({ isPending: true, venueIds: [VELVET, NEON] }));
-      await expect(service.approve('ban-1', 'staff-1', BASE_URL)).rejects.toThrow(ForbiddenException);
+      await expect(service.approve('ban-1', 'staff-1')).rejects.toThrow(ForbiddenException);
     });
 
     it.each([Role.DUTY_MANAGER, Role.BOUNCER])('stops a %s approving bans', async (role) => {
       actAs(role);
       prisma.ban.findUnique.mockResolvedValue(makeBan({ isPending: true }));
-      await expect(service.approve('ban-1', 'staff-1', BASE_URL)).rejects.toThrow(ForbiddenException);
+      await expect(service.approve('ban-1', 'staff-1')).rejects.toThrow(ForbiddenException);
     });
 
     it('rejects a ban that is already approved', async () => {
       actAs(Role.ADMIN);
-      await expect(service.approve('ban-1', 'staff-1', BASE_URL)).rejects.toThrow(BadRequestException);
+      await expect(service.approve('ban-1', 'staff-1')).rejects.toThrow(BadRequestException);
     });
 
     it('reports a missing ban as not found', async () => {
       actAs(Role.ADMIN);
       prisma.ban.findUnique.mockResolvedValue(null);
-      await expect(service.approve('ban-1', 'staff-1', BASE_URL)).rejects.toThrow(NotFoundException);
+      await expect(service.approve('ban-1', 'staff-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -197,13 +199,13 @@ describe('BansService', () => {
     it('needs a venue manager to manage the venues being added as well as the current ones', async () => {
       actAs(Role.VENUE_MANAGER, [VELVET]);
       await expect(
-        service.update('ban-1', { venueIds: [VELVET, NEON] }, 'staff-1', BASE_URL),
+        service.update('ban-1', { venueIds: [VELVET, NEON] }, 'staff-1'),
       ).rejects.toThrow(ForbiddenException);
     });
 
     it('replaces the venue list when venues are sent', async () => {
       actAs(Role.VENUE_MANAGER, [VELVET, DOCKS]);
-      await service.update('ban-1', { venueIds: [DOCKS] }, 'staff-1', BASE_URL);
+      await service.update('ban-1', { venueIds: [DOCKS] }, 'staff-1');
       expect(prisma.ban.update.mock.calls[0][0].data.venueBans).toEqual({
         deleteMany: {},
         create: [{ venueId: DOCKS }],
@@ -212,7 +214,7 @@ describe('BansService', () => {
 
     it('leaves venues alone when none are sent', async () => {
       actAs(Role.ADMIN);
-      await service.update('ban-1', { reason: 'theft' }, 'staff-1', BASE_URL);
+      await service.update('ban-1', { reason: 'theft' }, 'staff-1');
       const { data } = prisma.ban.update.mock.calls[0][0];
       expect(data.venueBans).toBeUndefined();
       expect(data.reason).toBe('Theft');
@@ -221,7 +223,7 @@ describe('BansService', () => {
     it('checks the new end date against the existing start date', async () => {
       actAs(Role.ADMIN);
       await expect(
-        service.update('ban-1', { endDate: inDays(-5) }, 'staff-1', BASE_URL),
+        service.update('ban-1', { endDate: inDays(-5) }, 'staff-1'),
       ).rejects.toThrow(BadRequestException);
     });
   });

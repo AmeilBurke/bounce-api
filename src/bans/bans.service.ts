@@ -32,7 +32,7 @@ export class BansService {
     private events: EventsGateway,
   ) {}
 
-  async create(createBanDto: CreateBanDto, staffId: Staff['id'], baseUrl: string) {
+  async create(createBanDto: CreateBanDto, staffId: Staff['id']) {
     const requester = await this.getRequester(staffId);
     const venueIds = uniqueIds(createBanDto.venueIds) ?? [];
 
@@ -63,7 +63,7 @@ export class BansService {
 
       this.notifyChanged();
 
-      return this.withImageUrl(ban, baseUrl);
+      return this.withImageUrl(ban);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
         throw new BadRequestException('The banned person or one or more venues do not exist');
@@ -72,18 +72,18 @@ export class BansService {
     }
   }
 
-  async findAll(baseUrl: string) {
+  async findAll() {
     const bans = await this.prisma.ban.findMany({
       where: { isPending: false },
       orderBy: { startDate: 'desc' },
       include: banInclude,
     });
 
-    return bans.map((ban) => this.withImageUrl(ban, baseUrl));
+    return bans.map((ban) => this.withImageUrl(ban));
   }
 
   // Only admins review pending bans
-  async findPending(staffId: Staff['id'], baseUrl: string) {
+  async findPending(staffId: Staff['id']) {
     await assertAdmin(this.prisma, staffId);
 
     const bans = await this.prisma.ban.findMany({
@@ -92,15 +92,15 @@ export class BansService {
       include: banInclude,
     });
 
-    return bans.map((ban) => this.withImageUrl(ban, baseUrl));
+    return bans.map((ban) => this.withImageUrl(ban));
   }
 
-  async findOne(id: Ban['id'], baseUrl: string) {
+  async findOne(id: Ban['id']) {
     const ban = await this.findBanOrThrow(id);
-    return this.withImageUrl(ban, baseUrl);
+    return this.withImageUrl(ban);
   }
 
-  async approve(id: Ban['id'], staffId: Staff['id'], baseUrl: string) {
+  async approve(id: Ban['id'], staffId: Staff['id']) {
     const requester = await this.getRequester(staffId);
     const ban = await this.findBanOrThrow(id);
 
@@ -118,10 +118,10 @@ export class BansService {
 
     this.notifyChanged();
 
-    return this.withImageUrl(approved, baseUrl);
+    return this.withImageUrl(approved);
   }
 
-  async update(id: Ban['id'], updateBanDto: UpdateBanDto, staffId: Staff['id'], baseUrl: string) {
+  async update(id: Ban['id'], updateBanDto: UpdateBanDto, staffId: Staff['id']) {
     const requester = await this.getRequester(staffId);
     const ban = await this.findBanOrThrow(id);
 
@@ -155,7 +155,7 @@ export class BansService {
 
       this.notifyChanged();
 
-      return this.withImageUrl(updated, baseUrl);
+      return this.withImageUrl(updated);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === 'P2003') {
@@ -248,12 +248,12 @@ export class BansService {
     this.events.notifyBansChanged();
   }
 
-  private withImageUrl(ban: BanWithRelations, baseUrl: string): BanWithRelations {
+  private withImageUrl(ban: BanWithRelations): BanWithRelations {
     return {
       ...ban,
       bannedPerson: {
         ...ban.bannedPerson,
-        imagePath: imageUrl(baseUrl, ImageFolder.PEOPLE, ban.bannedPerson.imagePath),
+        imagePath: imageUrl(ImageFolder.PEOPLE, ban.bannedPerson.imagePath),
       },
     };
   }

@@ -1,5 +1,4 @@
 import { ForbiddenException } from '@nestjs/common';
-import { Request } from 'express';
 import { PrismaClient, Role, Staff } from '../generated/prisma/client';
 
 export * from './images';
@@ -22,10 +21,6 @@ export function toTitleCase(input: string): string {
 export function capitalize(input: string): string {
   const trimmed = input.trim();
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
-}
-
-export function getBaseUrl(req: Request): string {
-  return `${req.protocol}://${req.get('host')}`;
 }
 
 // Removes duplicate ids; undefined stays undefined so "not sent" can mean "leave untouched"

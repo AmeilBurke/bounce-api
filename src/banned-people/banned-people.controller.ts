@@ -6,18 +6,16 @@ import {
   Param,
   Patch,
   Post,
-  Req,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import express from 'express';
 import { BannedPeopleService } from './banned-people.service';
 import { CreateBannedPersonDto } from './dto/create-banned-person.dto';
 import { UpdateBannedPersonDto } from './dto/update-banned-person.dto';
 import { RequestFrom } from '../auth/request-from.decorator';
 import type { StaffPayload } from '../auth/staff-payload.interface';
 import { BannedPerson, Venue } from '../generated/prisma/client';
-import { getBaseUrl, ImageUpload } from '../utils';
+import { ImageUpload } from '../utils';
 
 @Controller('banned-people')
 export class BannedPeopleController {
@@ -27,26 +25,25 @@ export class BannedPeopleController {
   @Post()
   create(
     @Body() createBannedPersonDto: CreateBannedPersonDto,
-    @Req() req: express.Request,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.bannedPeopleService.create(createBannedPersonDto, file, getBaseUrl(req));
+    return this.bannedPeopleService.create(createBannedPersonDto, file);
   }
 
   @Get()
-  findAll(@Req() req: express.Request) {
-    return this.bannedPeopleService.findAll(getBaseUrl(req));
+  findAll() {
+    return this.bannedPeopleService.findAll();
   }
 
   // These must be declared before ':id' or their paths would be treated as an id
   @Get('venue/:venueId')
-  findAtVenue(@Param('venueId') venueId: Venue['id'], @Req() req: express.Request) {
-    return this.bannedPeopleService.findAtVenue(venueId, getBaseUrl(req));
+  findAtVenue(@Param('venueId') venueId: Venue['id']) {
+    return this.bannedPeopleService.findAtVenue(venueId);
   }
 
   @Get('blanket')
-  findBlanketBanned(@Req() req: express.Request) {
-    return this.bannedPeopleService.findBlanketBanned(getBaseUrl(req));
+  findBlanketBanned() {
+    return this.bannedPeopleService.findBlanketBanned();
   }
 
   @Get('names')
@@ -55,8 +52,8 @@ export class BannedPeopleController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: BannedPerson['id'], @Req() req: express.Request) {
-    return this.bannedPeopleService.findOne(id, getBaseUrl(req));
+  findOne(@Param('id') id: BannedPerson['id']) {
+    return this.bannedPeopleService.findOne(id);
   }
 
   @UseInterceptors(ImageUpload())
@@ -65,7 +62,6 @@ export class BannedPeopleController {
     @Param('id') id: BannedPerson['id'],
     @Body() updateBannedPersonDto: UpdateBannedPersonDto,
     @RequestFrom() staff: StaffPayload,
-    @Req() req: express.Request,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.bannedPeopleService.update(
@@ -73,7 +69,6 @@ export class BannedPeopleController {
       updateBannedPersonDto,
       staff.id,
       file,
-      getBaseUrl(req),
     );
   }
 

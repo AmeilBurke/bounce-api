@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import * as fs from 'fs';
 import { CreateBannedPersonDto } from './dto/create-banned-person.dto';
 import { UpdateBannedPersonDto } from './dto/update-banned-person.dto';
 import { PrismaService } from '../prisma.service';
@@ -7,10 +6,9 @@ import { EventsGateway } from '../events/events.gateway';
 import { BannedPerson, Prisma, Staff, Venue } from '../generated/prisma/client';
 import {
   assertAdmin,
+  copyImage,
   deleteImage,
-  deleteUpload,
   ImageFolder,
-  imagePath,
   imageUrl,
   saveImage,
   toTitleCase,
@@ -52,7 +50,6 @@ export class BannedPeopleService {
   async create(
     createBannedPersonDto: CreateBannedPersonDto,
     file: Express.Multer.File | undefined,
-    baseUrl: string,
   ) {
     let savedImage: string | undefined;
 
@@ -73,26 +70,24 @@ export class BannedPeopleService {
 
       this.events.notifyBannedPeopleChanged();
 
-      return this.withImageUrl(person, baseUrl);
+      return this.withImageUrl(person);
     } catch (err) {
       if (savedImage) await deleteImage(ImageFolder.PEOPLE, savedImage);
       throw err;
-    } finally {
-      await deleteUpload(file);
     }
   }
 
-  async findAll(baseUrl: string) {
+  async findAll() {
     const people = await this.prisma.bannedPerson.findMany({
       orderBy: { name: 'asc' },
       include: bannedPersonInclude,
     });
 
-    return people.map((person) => this.withImageUrl(person, baseUrl));
+    return people.map((person) => this.withImageUrl(person));
   }
 
   // People with an approved ban at the venue, carrying only their bans at that venue
-  async findAtVenue(venueId: Venue['id'], baseUrl: string) {
+  async findAtVenue(venueId: Venue['id']) {
     const atVenue = {
       isPending: false,
       venueBans: { some: { venueId } },
@@ -107,11 +102,11 @@ export class BannedPeopleService {
       },
     });
 
-    return people.map((person) => this.withImageUrl(person, baseUrl));
+    return people.map((person) => this.withImageUrl(person));
   }
 
   // People whose active bans, taken together, cover every venue
-  async findBlanketBanned(baseUrl: string) {
+  async findBlanketBanned() {
     const venues = await this.prisma.venue.findMany({ select: { id: true } });
     if (venues.length === 0) return [];
 
@@ -126,7 +121,7 @@ export class BannedPeopleService {
 
     return candidates
       .filter((person) => this.coversEveryVenue(person, venues, now))
-      .map((person) => this.withImageUrl(person, baseUrl));
+      .map((person) => this.withImageUrl(person));
   }
 
   // Just enough to pick a person from a list
@@ -137,7 +132,7 @@ export class BannedPeopleService {
     });
   }
 
-  async findOne(id: BannedPerson['id'], baseUrl: string) {
+  async findOne(id: BannedPerson['id']) {
     const person = await this.prisma.bannedPerson.findUnique({
       where: { id },
       include: bannedPersonInclude,
@@ -147,7 +142,7 @@ export class BannedPeopleService {
       throw new NotFoundException('Banned person not found');
     }
 
-    return this.withImageUrl(person, baseUrl);
+    return this.withImageUrl(person);
   }
 
   async update(
@@ -155,7 +150,6 @@ export class BannedPeopleService {
     updateBannedPersonDto: UpdateBannedPersonDto,
     staffId: Staff['id'],
     file: Express.Multer.File | undefined,
-    baseUrl: string,
   ) {
     let savedImage: string | undefined;
 
@@ -192,7 +186,7 @@ export class BannedPeopleService {
 
       this.events.notifyBannedPeopleChanged();
 
-      return this.withImageUrl(person, baseUrl);
+      return this.withImageUrl(person);
     } catch (err) {
       if (savedImage) await deleteImage(ImageFolder.PEOPLE, savedImage);
 
@@ -200,8 +194,6 @@ export class BannedPeopleService {
         throw new NotFoundException('Banned person not found');
       }
       throw err;
-    } finally {
-      await deleteUpload(file);
     }
   }
 
@@ -219,10 +211,7 @@ export class BannedPeopleService {
     // Deleting the person sets the alert's bannedPersonId to null, after which the
     // alert looks for its image in the alerts folder, so copy it there first
     if (person.alert) {
-      await fs.promises.copyFile(
-        imagePath(ImageFolder.PEOPLE, person.imagePath),
-        imagePath(ImageFolder.ALERTS, person.imagePath),
-      );
+      await copyImage(ImageFolder.PEOPLE, ImageFolder.ALERTS, person.imagePath);
     }
 
     try {
@@ -253,7 +242,7 @@ export class BannedPeopleService {
     return venues.every((venue) => covered.has(venue.id));
   }
 
-  private withImageUrl<T extends BannedPerson>(person: T, baseUrl: string): T {
-    return { ...person, imagePath: imageUrl(baseUrl, ImageFolder.PEOPLE, person.imagePath) };
+  private withImageUrl<T extends BannedPerson>(person: T): T {
+    return { ...person, imagePath: imageUrl(ImageFolder.PEOPLE, person.imagePath) };
   }
 }

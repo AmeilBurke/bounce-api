@@ -1,4 +1,4 @@
-const REQUIRED = ['DATABASE_URL', 'JWT_SECRET'] as const;
+const REQUIRED = ['DATABASE_URL', 'JWT_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
 
 // Passed to ConfigModule so a missing variable stops the app at startup, not on first use
 export function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
