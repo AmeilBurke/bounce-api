@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { VenuesController } from './venues.controller';
 import { VenuesService } from './venues.service';
+import { mockOf } from '../../test/mock-providers';
 
 describe('VenuesController', () => {
   let controller: VenuesController;
@@ -8,7 +9,7 @@ describe('VenuesController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VenuesController],
-      providers: [VenuesService],
+      providers: [mockOf(VenuesService)],
     }).compile();
 
     controller = module.get<VenuesController>(VenuesController);

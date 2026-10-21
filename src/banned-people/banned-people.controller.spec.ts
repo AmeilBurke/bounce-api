@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BannedPeopleController } from './banned-people.controller';
 import { BannedPeopleService } from './banned-people.service';
+import { mockOf } from '../../test/mock-providers';
 
 describe('BannedPeopleController', () => {
   let controller: BannedPeopleController;
@@ -8,7 +9,7 @@ describe('BannedPeopleController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [BannedPeopleController],
-      providers: [BannedPeopleService],
+      providers: [mockOf(BannedPeopleService)],
     }).compile();
 
     controller = module.get<BannedPeopleController>(BannedPeopleController);

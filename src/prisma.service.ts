@@ -18,7 +18,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       await this.$queryRaw`SELECT 1`;
       this.logger.log('Database connected');
     } catch {
-      console.log('Docker database not running or unreachable (check the container is up)');
+      this.logger.error('Database unreachable, check DATABASE_URL in .env');
     }
   }
 }

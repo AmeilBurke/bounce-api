@@ -6,7 +6,7 @@ import * as argon2 from 'argon2';
 import sharp from 'sharp';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Role } from '../src/generated/prisma/client';
-import { createImageFolders, ImageFolder, imagePath } from '../src/utils/images';
+import { createImageFolders, ImageFolder, imagePath, MAX_IMAGE_SIZE } from '../src/utils/images';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -56,6 +56,27 @@ async function createImage(folder: ImageFolder, name: string): Promise<string> {
 
   await sharp(Buffer.from(svg)).webp({ quality: 75 }).toFile(imagePath(folder, filename));
   return filename;
+}
+
+// pravatar.cc has 70 numbered face photos, so each person gets the next one in order
+const PORTRAIT_COUNT = 70;
+let portraitIndex = 0;
+
+// Downloads a stock face photo, falling back to initials when offline
+async function createPortrait(name: string): Promise<string> {
+  const filename = `${SEED_IMAGE_PREFIX}${slugify(name)}.webp`;
+  const img = (portraitIndex++ % PORTRAIT_COUNT) + 1;
+  try {
+    const res = await fetch(`https://i.pravatar.cc/${MAX_IMAGE_SIZE}?img=${img}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await sharp(Buffer.from(await res.arrayBuffer()))
+      .webp({ quality: 75 })
+      .toFile(imagePath(ImageFolder.PEOPLE, filename));
+    return filename;
+  } catch (err) {
+    console.warn(`Couldn't download a photo for ${name}, using initials: ${(err as Error).message}`);
+    return createImage(ImageFolder.PEOPLE, name);
+  }
 }
 
 async function removeSeedImages() {
@@ -282,7 +303,7 @@ async function main() {
     const created = await prisma.bannedPerson.create({
       data: {
         name: person.name,
-        imagePath: await createImage(ImageFolder.PEOPLE, person.name),
+        imagePath: await createPortrait(person.name),
         bans: {
           create: person.bans.map((ban) => ({
             reason: ban.reason,

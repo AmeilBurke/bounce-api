@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AlertsController } from './alerts.controller';
 import { AlertsService } from './alerts.service';
+import { mockOf } from '../../test/mock-providers';
 
 describe('AlertsController', () => {
   let controller: AlertsController;
@@ -8,7 +9,7 @@ describe('AlertsController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AlertsController],
-      providers: [AlertsService],
+      providers: [mockOf(AlertsService)],
     }).compile();
 
     controller = module.get<AlertsController>(AlertsController);
