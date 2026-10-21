@@ -67,6 +67,8 @@ export class AlertsService {
           bannedPersonId,
         },
       });
+      // The alert now points at the image, so a later error mustn't delete it
+      savedImage = undefined;
 
       this.events.notifyAlertsChanged();
 

@@ -67,6 +67,8 @@ export class BannedPeopleService {
         },
         include: bannedPersonInclude,
       });
+      // The person now points at the image, so a later error mustn't delete it
+      savedImage = undefined;
 
       this.events.notifyBannedPeopleChanged();
 
@@ -180,6 +182,8 @@ export class BannedPeopleService {
       });
 
       if (savedImage) {
+        // The person now points at the new image, so a later error mustn't delete it
+        savedImage = undefined;
         await deleteImage(ImageFolder.PEOPLE, existing.imagePath);
         if (person.alert) this.events.notifyAlertsChanged();
       }
