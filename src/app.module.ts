@@ -11,10 +11,11 @@ import { AlertsModule } from './alerts/alerts.module';
 import { VenuesModule } from './venues/venues.module';
 import { BannedPeopleModule } from './banned-people/banned-people.module';
 import { BansModule } from './bans/bans.module';
+import { validateEnv } from './env';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
     PrismaModule,
     EventsModule,

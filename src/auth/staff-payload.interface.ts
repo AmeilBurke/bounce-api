@@ -6,4 +6,5 @@ export interface StaffPayload {
   name: Staff['name'];
   role: Staff['role'];
   iat: number;
+  exp: number;
 }
