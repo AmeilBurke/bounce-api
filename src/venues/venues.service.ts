@@ -112,9 +112,21 @@ export class VenuesService {
     await assertAdmin(this.prisma, staffId);
 
     try {
-      const deletedVenue = await this.prisma.venue.delete({ where: { id } });
+      const deletedVenue = await this.prisma.$transaction(async (tx) => {
+        // Bans covering only this venue would apply nowhere once it's gone, so they go with it.
+        // `some` stops `every` also matching bans that already have no venues
+        await tx.ban.deleteMany({
+          where: {
+            venueBans: { some: { venueId: id }, every: { venueId: id } },
+          },
+        });
+
+        return tx.venue.delete({ where: { id } });
+      });
 
       this.events.notifyVenuesChanged();
+      this.events.notifyBansChanged();
+      this.events.notifyBannedPeopleChanged();
 
       return `Deleted venue ${deletedVenue.name}`;
     } catch (err) {
